@@ -1,9 +1,13 @@
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize)]
 pub struct HairiResult {
     pub now: i32,
     pub wait: Vec<i32>,
     pub waits_after_discard: Vec<(i32, Vec<i32>)>,
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct RiichiOptions<'t> {
     pub dora: &'t Vec<i32>,
     pub aka_count: i32,
@@ -27,11 +31,13 @@ pub struct RiichiOptions<'t> {
     pub last_tile: bool,
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct RiichiHand {
     pub closed_part: Vec<i32>,
     pub open_part: Vec<(bool, Vec<i32>)>, // (isOpenMeld, tiles)
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct RiichiResult {
     pub is_agari: bool,
     pub yakuman: i32,
