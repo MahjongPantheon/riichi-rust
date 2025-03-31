@@ -8,8 +8,8 @@ pub struct HairiResult {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct RiichiOptions<'t> {
-    pub dora: &'t Vec<i32>,
+pub struct RiichiOptions {
+    pub dora: Vec<i32>,
     pub aka_count: i32,
     pub first_take: bool, // tenhou/chihou/renhou
     pub riichi: bool,
@@ -23,8 +23,8 @@ pub struct RiichiOptions<'t> {
     pub allow_aka: bool,
     pub allow_kuitan: bool,
     pub with_kiriage: bool,
-    pub disabled_yaku: &'t Vec<i32>,
-    pub local_yaku_enabled: &'t Vec<i32>,
+    pub disabled_yaku: Vec<i32>,
+    pub local_yaku_enabled: Vec<i32>,
     pub all_local_yaku_enabled: bool,
     pub allow_double_yakuman: bool,
     pub taken_tile: i32,
