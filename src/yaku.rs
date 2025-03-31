@@ -1,4 +1,4 @@
-use crate::agari::{check, check7};
+use crate::agari::{check, check7, check13};
 use crate::constants::{Suit, Tiles, is19, slice_by_suit, sum};
 
 pub struct YakuCheckInput<'t> {
@@ -214,7 +214,7 @@ fn check_yakuhai(current_pattern: &Vec<Vec<i32>>, jikaze: i32, bakaze: i32, whic
 // Certain yaku checkers
 
 fn yaku_check_kokushimusou_13_sides(i: &YakuCheckInput) -> bool {
-    check(i.haipai34)
+    check13(i.haipai34)
         && i.haipai.iter().fold(
             0,
             |total, v| {
@@ -224,7 +224,7 @@ fn yaku_check_kokushimusou_13_sides(i: &YakuCheckInput) -> bool {
 }
 
 fn yaku_check_kokusimusou(i: &YakuCheckInput) -> bool {
-    check(i.haipai34)
+    check13(i.haipai34)
         && i.haipai.iter().fold(
             0,
             |total, v| {

@@ -86,7 +86,7 @@ pub fn check(haipai: &Vec<i32>) -> bool {
     }
 
     // Adding honors as well
-    let slice_sum = sum(&Vec::from(&haipai[3 * 9..(3 + 1) * 7]));
+    let slice_sum = sum(&Vec::from(&haipai[3 * 9..3 * 9 + 7]));
 
     if slice_sum % 3 == 1 {
         return false;
@@ -586,6 +586,13 @@ mod tests {
                 0, 0, 0, 0, 0, 0, 0, 0, 0, //
                 0, 0, 0, 0, 0, 0, 0,
             ]),
+            // incomplete hand should be fine too
+            Vec::from([
+                1, 1, 1, 0, 0, 0, 0, 0, 0, //
+                0, 1, 1, 1, 0, 0, 0, 0, 0, //
+                0, 0, 1, 1, 1, 0, 0, 0, 0, //
+                2, 0, 0, 0, 0, 0, 0, //
+            ]),
         ];
 
         let expected = [
@@ -720,6 +727,12 @@ mod tests {
                     Vec::from([8, 8]),
                 ]),
             ])),
+            digest_all(Vec::from([Vec::from([
+                Vec::from([1, 2, 3]),
+                Vec::from([11, 12, 13]),
+                Vec::from([21, 22, 23]),
+                Vec::from([28, 28]),
+            ])])),
         ];
 
         for i in 0..8 {

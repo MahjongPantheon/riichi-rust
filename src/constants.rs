@@ -212,21 +212,21 @@ impl Yaku {
     }
 }
 
-pub fn kokushi_idx() -> [Tiles; 13] {
+pub fn kokushi_idx() -> [i32; 13] {
     [
-        Tiles::M1,
-        Tiles::M9,
-        Tiles::P1,
-        Tiles::P9,
-        Tiles::S1,
-        Tiles::S9,
-        Tiles::E,
-        Tiles::S,
-        Tiles::W,
-        Tiles::N,
-        Tiles::WD,
-        Tiles::GD,
-        Tiles::RD,
+        Tiles::M1 as i32,
+        Tiles::M9 as i32,
+        Tiles::P1 as i32,
+        Tiles::P9 as i32,
+        Tiles::S1 as i32,
+        Tiles::S9 as i32,
+        Tiles::E as i32,
+        Tiles::S as i32,
+        Tiles::W as i32,
+        Tiles::N as i32,
+        Tiles::WD as i32,
+        Tiles::GD as i32,
+        Tiles::RD as i32,
     ]
 }
 
@@ -256,15 +256,7 @@ pub fn slice_by_suit(haipai: &Vec<i32>) -> Vec<Vec<i32>> {
 }
 
 pub fn is19(tile: i32) -> bool {
-    [
-        Tiles::M1 as i32,
-        Tiles::M9 as i32,
-        Tiles::P1 as i32,
-        Tiles::P9 as i32,
-        Tiles::S1 as i32,
-        Tiles::S9 as i32,
-    ]
-    .contains(&tile)
+    kokushi_idx().contains(&tile)
 }
 
 pub fn is_proper_open_set(arr: &Vec<i32>) -> bool {
