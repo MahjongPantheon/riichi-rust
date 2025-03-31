@@ -23,13 +23,6 @@ pub enum Val {
     N9 = 9,
 }
 
-#[derive(Clone)]
-pub enum Retval {
-    Ok = -1,
-    Fail = -2,
-    WrongCount = -3,
-}
-
 impl Mul<i32> for Suit {
     type Output = usize;
 
@@ -148,70 +141,6 @@ pub enum Yaku {
     Akadora = 55,
 }
 
-impl Yaku {
-    pub(crate) fn from_i32(value: i32) -> Yaku {
-        match value {
-            0 => Yaku::Kokushimusou13Sides,
-            1 => Yaku::Kokushimusou,
-            2 => Yaku::Chuurenpoto9Sides,
-            3 => Yaku::Chuurenpoto,
-            4 => Yaku::SuuankouTanki,
-            5 => Yaku::Suuankou,
-            6 => Yaku::Daisuushi,
-            7 => Yaku::Shosuushi,
-            8 => Yaku::Daisangen,
-            9 => Yaku::Tsuuiisou,
-            10 => Yaku::Ryuuiisou,
-            11 => Yaku::Chinroutou,
-            12 => Yaku::Suukantsu,
-            13 => Yaku::Tenhou,
-            14 => Yaku::Chihou,
-            15 => Yaku::Renhou,
-            16 => Yaku::Daisharin,
-            17 => Yaku::Chinitsu,
-            18 => Yaku::Honitsu,
-            19 => Yaku::Ryanpeikou,
-            20 => Yaku::Junchan,
-            21 => Yaku::Chanta,
-            22 => Yaku::Toitoi,
-            23 => Yaku::Honroutou,
-            24 => Yaku::Sankantsu,
-            25 => Yaku::Shosangen,
-            26 => Yaku::SanshokuDoukou,
-            27 => Yaku::Sanankou,
-            28 => Yaku::Chiitoitsu,
-            29 => Yaku::DaburuRiichi,
-            30 => Yaku::Ittsu,
-            31 => Yaku::Sanshoku,
-            32 => Yaku::Tanyao,
-            33 => Yaku::Pinfu,
-            34 => Yaku::Iipeikou,
-            35 => Yaku::Menzentsumo,
-            36 => Yaku::Riichi,
-            37 => Yaku::Ippatsu,
-            38 => Yaku::Rinshan,
-            39 => Yaku::Chankan,
-            40 => Yaku::Haitei,
-            41 => Yaku::Houtei,
-            42 => Yaku::RoundWindEast,
-            43 => Yaku::RoundWindSouth,
-            44 => Yaku::RoundWindWest,
-            45 => Yaku::RoundWindNorth,
-            46 => Yaku::OwnWindEast,
-            47 => Yaku::OwnWindSouth,
-            48 => Yaku::OwnWindWest,
-            49 => Yaku::OwnWindNorth,
-            50 => Yaku::Haku,
-            51 => Yaku::Hatsu,
-            52 => Yaku::Chun,
-            53 => Yaku::Dora,
-            54 => Yaku::Uradora,
-            55 => Yaku::Akadora,
-            _ => panic!("Unknown value: {}", value),
-        }
-    }
-}
-
 pub fn kokushi_idx() -> [i32; 13] {
     [
         Tiles::M1 as i32,
@@ -228,10 +157,6 @@ pub fn kokushi_idx() -> [i32; 13] {
         Tiles::GD as i32,
         Tiles::RD as i32,
     ]
-}
-
-pub fn idx(suit: Suit, val: Val) -> usize {
-    suit as usize * 9 + (val as i32 - 1) as usize
 }
 
 pub fn sum(haipai: &Vec<i32>) -> i32 {
@@ -297,38 +222,6 @@ pub fn digest(decomposition: &Vec<Vec<i32>>) -> String {
         .collect::<Vec<String>>();
     arr.sort();
     arr.join("#")
-}
-
-pub fn digest_all(decompositions: Vec<Vec<Vec<i32>>>) -> String {
-    decompositions
-        .iter()
-        .map(|set| digest(&set.clone()))
-        .collect::<Vec<String>>()
-        .join("$")
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    pub fn idx_works() {
-        let hand = [
-            1, 2, 3, 4, 5, 6, 7, 8, 9, //
-            10, 11, 12, 13, 14, 15, 16, 17, 18, //
-            19, 20, 21, 22, 23, 24, 25, 26, 27, //
-            28, 29, 30, 31, 32, 33, 34,
-        ];
-
-        assert_eq!(hand[idx(Suit::Man, Val::N1)], 1);
-        assert_eq!(hand[idx(Suit::Man, Val::N7)], 7);
-        assert_eq!(hand[idx(Suit::Pin, Val::N7)], 16);
-        assert_eq!(hand[idx(Suit::Pin, Val::N9)], 18);
-        assert_eq!(hand[idx(Suit::Sou, Val::N3)], 21);
-        assert_eq!(hand[idx(Suit::Sou, Val::N7)], 25);
-        assert_eq!(hand[idx(Suit::Honor, Val::N2)], 29);
-        assert_eq!(hand[idx(Suit::Honor, Val::N6)], 33);
-    }
 }
 
 pub static GREENS: [i32; 6] = [

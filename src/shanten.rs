@@ -1,11 +1,11 @@
-use crate::constants::{Retval, kokushi_idx, sum};
+use crate::constants::{kokushi_idx, sum};
 use crate::interfaces::HairiResult;
 use std::cmp::min;
 
 pub fn shanten13(haipai: &Vec<i32>) -> i32 {
     let cnt = sum(&haipai);
     if cnt < 13 || cnt > 14 {
-        return Retval::WrongCount as i32;
+        return -1; // wrong count
     }
 
     let mut singles = 0;
@@ -26,7 +26,7 @@ pub fn shanten13(haipai: &Vec<i32>) -> i32 {
 pub fn shanten7(haipai: &Vec<i32>) -> i32 {
     let cnt = sum(&haipai);
     if cnt < 13 || cnt > 14 {
-        return Retval::WrongCount as i32;
+        return -1; // wrong count
     }
 
     let mut pairs = 0;
@@ -218,7 +218,7 @@ pub fn shanten(haipai: &Vec<i32>) -> i32 {
 
     let s = sum(&haipai);
     if s > 14 || s % 3 == 0 {
-        return Retval::WrongCount as i32;
+        return -1; // wrong count;
     }
 
     furo = ((14 - s) as f32 / 3.).round() as i32;
@@ -284,7 +284,7 @@ pub fn hairi(haipai: &mut Vec<i32>, is_7_or_13: bool) -> Option<HairiResult> {
         waits_after_discard: Vec::new(),
     };
 
-    if sht == Retval::WrongCount as i32 {
+    if sht == -1 {
         return None;
     }
 

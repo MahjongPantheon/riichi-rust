@@ -333,7 +333,14 @@ pub fn find_all_agari_patterns(haipai: &Vec<i32>) -> Vec<Vec<Vec<i32>>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::constants::digest_all;
+
+    fn digest_all(decompositions: Vec<Vec<Vec<i32>>>) -> String {
+        decompositions
+            .iter()
+            .map(|set| digest(&set.clone()))
+            .collect::<Vec<String>>()
+            .join("$")
+    }
 
     #[test]
     pub fn test_kokushimusou() {
