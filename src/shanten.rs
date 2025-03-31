@@ -486,12 +486,12 @@ mod tests {
     #[test]
     pub fn shanten_13tiles_works() {
         // Hand with 13 tiles but not tenpai
-        let res = shanten(&Vec::from([
+        let res = shanten(&vec![
             2, 2, 2, 0, 0, 0, 0, 0, 0, //
             0, 0, 0, 0, 1, 1, 1, 0, 0, //
             0, 1, 0, 0, 1, 2, 0, 0, 0, //
             0, 0, 0, 0, 0, 0, 0,
-        ]));
+        ]);
         assert_eq!(res, 1);
     }
 
@@ -1568,10 +1568,10 @@ mod tests {
         assert_eq!(
             res.waits_after_discard,
             [
-                (20, Vec::from([21, 24])),
-                (21, Vec::from([20])),
-                (23, Vec::from([24])),
-                (24, Vec::from([20, 23]))
+                (20, vec![21, 24]),
+                (21, vec![20]),
+                (23, vec![24]),
+                (24, vec![20, 23])
             ]
         );
     }
@@ -1590,11 +1590,7 @@ mod tests {
         assert_eq!(res.now, 0);
         assert_eq!(
             res.waits_after_discard,
-            [
-                (0, Vec::from([1, 4])),
-                (2, Vec::from([0, 3, 22])),
-                (3, Vec::from([1, 4]))
-            ]
+            [(0, vec![1, 4]), (2, vec![0, 3, 22]), (3, vec![1, 4])]
         );
     }
 }

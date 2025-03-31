@@ -15,12 +15,12 @@ pub fn calc_riichi(
     // Closed kan will be with minus sign in tile values
     let mut furo: Vec<Vec<i32>> = Vec::new();
     // tile34-formatted haipai
-    let mut haipai34: Vec<i32> = Vec::from([
+    let mut haipai34: Vec<i32> = vec![
         0, 0, 0, 0, 0, 0, 0, 0, 0, //
         0, 0, 0, 0, 0, 0, 0, 0, 0, //
         0, 0, 0, 0, 0, 0, 0, 0, 0, //
         0, 0, 0, 0, 0, 0, 0,
-    ]);
+    ];
 
     let taken_tile: i32;
     let is_tsumo: bool;

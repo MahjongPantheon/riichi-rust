@@ -115,7 +115,7 @@ pub fn find_kotsu(haipai: &mut Vec<i32>) -> Vec<Vec<i32>> {
         if haipai[i] >= 3 {
             haipai[i] -= 3;
             if check(haipai) {
-                res.push(Vec::from([i as i32 + 1, i as i32 + 1, i as i32 + 1]));
+                res.push(vec![i as i32 + 1, i as i32 + 1, i as i32 + 1]);
             } else {
                 haipai[i] += 3;
             }
@@ -149,11 +149,7 @@ pub fn find_shuntsu(haipai: &mut Vec<i32>) -> Vec<Vec<i32>> {
             haipai[i + 2] -= 1;
 
             if check(haipai) {
-                res.push(Vec::from([
-                    i as i32 + 1,
-                    (i + 1) as i32 + 1,
-                    (i + 2) as i32 + 1,
-                ]));
+                res.push(vec![i as i32 + 1, (i + 1) as i32 + 1, (i + 2) as i32 + 1]);
             } else {
                 haipai[i] += 1;
                 haipai[i + 1] += 1;
@@ -192,7 +188,7 @@ pub fn calc(haipai: &Vec<i32>, exclude: i32, real_pair: i32) -> Vec<Vec<Vec<i32>
         } else {
             find_janto(&clone, exclude)
         };
-        kotsu.extend_from_slice(&[Vec::from([janto + 1, janto + 1])]);
+        kotsu.extend_from_slice(&[vec![janto + 1, janto + 1]]);
         res.push(kotsu);
     } else if kotsu.len() > 0 {
         let shuntsu = find_shuntsu(clone.as_mut());
@@ -202,7 +198,7 @@ pub fn calc(haipai: &Vec<i32>, exclude: i32, real_pair: i32) -> Vec<Vec<Vec<i32>
             find_janto(&clone, exclude)
         };
         kotsu.extend_from_slice(&shuntsu);
-        kotsu.extend_from_slice(&[Vec::from([janto + 1, janto + 1])]);
+        kotsu.extend_from_slice(&[vec![janto + 1, janto + 1]]);
         res.push(kotsu);
     }
 
@@ -216,7 +212,7 @@ pub fn calc(haipai: &Vec<i32>, exclude: i32, real_pair: i32) -> Vec<Vec<Vec<i32>
             find_janto(&clone, exclude)
         };
         // pinfu-like
-        shuntsu.extend_from_slice(&[Vec::from([janto + 1, janto + 1])]);
+        shuntsu.extend_from_slice(&[vec![janto + 1, janto + 1]]);
         res.push(shuntsu);
     } else {
         let kotsu = find_kotsu(clone.as_mut());
@@ -226,7 +222,7 @@ pub fn calc(haipai: &Vec<i32>, exclude: i32, real_pair: i32) -> Vec<Vec<Vec<i32>
             find_janto(&clone, exclude)
         };
         shuntsu.extend_from_slice(&kotsu);
-        shuntsu.extend_from_slice(&[Vec::from([janto + 1, janto + 1])]);
+        shuntsu.extend_from_slice(&[vec![janto + 1, janto + 1]]);
         res.push(shuntsu);
     }
 
@@ -250,7 +246,7 @@ pub fn find_all_agari_patterns(haipai: &Vec<i32>) -> Vec<Vec<Vec<i32>>> {
     if sum(&clone) == 2 {
         let found = find_janto(&clone, -1);
         if found != -1 {
-            res.push(Vec::from([Vec::from([found + 1, found + 1])]));
+            res.push(vec![vec![found + 1, found + 1]]);
         }
         return res;
     }
@@ -266,7 +262,7 @@ pub fn find_all_agari_patterns(haipai: &Vec<i32>) -> Vec<Vec<Vec<i32>>> {
                 }
             }
         }
-        res.push(Vec::from([vals]));
+        res.push(vec![vals]);
     }
 
     // Some questionable code below :)
@@ -309,7 +305,7 @@ pub fn find_all_agari_patterns(haipai: &Vec<i32>) -> Vec<Vec<Vec<i32>>> {
         let mut vals: Vec<Vec<i32>> = Vec::new();
         for i in 0..clone.len() {
             if clone[i] == 2 {
-                vals.push(Vec::from([i as i32 + 1, i as i32 + 1]));
+                vals.push(vec![i as i32 + 1, i as i32 + 1]);
             }
         }
         res.push(vals);
@@ -342,32 +338,32 @@ mod tests {
     #[test]
     pub fn test_kokushimusou() {
         assert_eq!(
-            check13(&Vec::from([
+            check13(&vec![
                 1, 0, 0, 0, 0, 0, 0, 0, 1, //
                 1, 0, 0, 0, 0, 0, 0, 0, 1, //
                 1, 0, 0, 0, 0, 0, 0, 0, 1, //
                 1, 1, 2, 1, 1, 1, 1
-            ])),
+            ]),
             true
         );
 
         assert_eq!(
-            check13(&Vec::from([
+            check13(&vec![
                 1, 0, 0, 0, 0, 0, 0, 0, 1, //
                 1, 0, 1, 0, 0, 0, 0, 0, 1, //
                 1, 0, 0, 0, 0, 0, 0, 0, 1, //
                 1, 1, 1, 1, 1, 1, 1
-            ])),
+            ]),
             false
         );
 
         assert_eq!(
-            check13(&Vec::from([
+            check13(&vec![
                 0, 0, 2, 0, 0, 0, 0, 0, 0, //
                 0, 0, 0, 0, 2, 0, 2, 0, 0, //
                 2, 0, 0, 0, 0, 2, 0, 0, 0, //
                 0, 0, 2, 0, 2, 0, 0
-            ])),
+            ]),
             false
         );
     }
@@ -375,22 +371,22 @@ mod tests {
     #[test]
     pub fn test_chiitoitsu() {
         assert_eq!(
-            check7(&Vec::from([
+            check7(&vec![
                 0, 0, 2, 0, 0, 0, 0, 0, 0, //
                 0, 0, 0, 0, 2, 0, 2, 0, 0, //
                 2, 0, 0, 0, 0, 2, 0, 0, 0, //
                 0, 0, 2, 0, 2, 0, 0
-            ])),
+            ]),
             true
         );
 
         assert_eq!(
-            check7(&Vec::from([
+            check7(&vec![
                 0, 0, 2, 0, 0, 0, 0, 0, 0, //
                 0, 0, 0, 0, 2, 0, 2, 0, 0, //
                 1, 1, 0, 0, 0, 2, 0, 0, 0, //
                 0, 0, 2, 0, 2, 0, 0
-            ])),
+            ]),
             false
         );
     }
@@ -398,30 +394,30 @@ mod tests {
     #[test]
     pub fn test_basic_form() {
         let hands = [
-            Vec::from([
+            vec![
                 2, 2, 0, 2, 0, 0, 2, 2, 2, //
                 0, 0, 2, 0, 0, 0, 0, 0, 0, //
                 0, 0, 0, 0, 0, 0, 0, 0, 0, //
                 0, 0, 0, 0, 0, 0, 0,
-            ]),
-            Vec::from([
+            ],
+            vec![
                 1, 0, 0, 0, 0, 0, 0, 0, 1, //
                 1, 0, 0, 0, 0, 0, 0, 0, 1, //
                 1, 0, 0, 0, 0, 0, 0, 0, 1, //
                 1, 2, 1, 1, 1, 1, 1,
-            ]),
-            Vec::from([
+            ],
+            vec![
                 0, 0, 0, 0, 0, 2, 2, 2, 0, //
                 0, 0, 0, 0, 0, 0, 1, 1, 1, //
                 0, 0, 2, 0, 0, 0, 0, 0, 0, //
                 0, 0, 0, 0, 0, 3, 0,
-            ]),
-            Vec::from([
+            ],
+            vec![
                 2, 2, 2, 2, 0, 0, 2, 2, 2, //
                 0, 0, 0, 0, 0, 0, 0, 0, 0, //
                 0, 0, 0, 0, 0, 0, 0, 0, 0, //
                 0, 0, 0, 0, 0, 0, 0,
-            ]),
+            ],
         ];
 
         assert_eq!(check(&hands[0]), false);
@@ -447,65 +443,65 @@ mod tests {
 
     #[test]
     pub fn test_find_kotsu() {
-        let mut hand = Vec::from([
+        let mut hand = vec![
             0, 0, 0, 0, 3, 0, 0, 0, 0, //
             0, 0, 0, 3, 0, 0, 0, 2, 0, //
             0, 0, 3, 0, 0, 0, 0, 0, 0, //
             0, 3, 0, 0, 0, 0, 0,
-        ]);
-        let expected = Vec::from([
-            Vec::from([5, 5, 5]),    //
-            Vec::from([13, 13, 13]), //
-            Vec::from([21, 21, 21]), //
-            Vec::from([29, 29, 29]),
-        ]);
+        ];
+        let expected = vec![
+            vec![5, 5, 5],    //
+            vec![13, 13, 13], //
+            vec![21, 21, 21], //
+            vec![29, 29, 29],
+        ];
         assert_eq!(find_kotsu(hand.as_mut()), expected);
     }
 
     #[test]
     pub fn test_find_shuntsu() {
         let mut hands = [
-            Vec::from([
+            vec![
                 1, 1, 1, 0, 0, 0, 1, 1, 1, //
                 0, 0, 0, 1, 1, 1, 0, 2, 0, //
                 0, 0, 1, 1, 1, 0, 0, 0, 0, //
                 0, 0, 0, 0, 0, 0, 0,
-            ]),
-            Vec::from([
+            ],
+            vec![
                 0, 0, 0, 0, 0, 0, 0, 0, 0, //
                 0, 1, 2, 3, 2, 1, 0, 2, 0, //
                 0, 0, 1, 1, 1, 0, 0, 0, 0, //
                 0, 0, 0, 0, 0, 0, 0,
-            ]),
-            Vec::from([
+            ],
+            vec![
                 0, 0, 0, 0, 1, 1, 1, 0, 1, //
                 1, 1, 0, 1, 1, 1, 0, 2, 0, //
                 0, 0, 1, 1, 1, 0, 0, 0, 0, //
                 0, 0, 0, 0, 0, 0, 0,
-            ]),
-            Vec::from([
+            ],
+            vec![
                 0, 0, 0, 0, 0, 0, 0, 0, 0, //
                 0, 0, 0, 0, 0, 0, 0, 2, 0, //
                 0, 0, 1, 1, 1, 0, 0, 0, 0, //
                 0, 3, 3, 3, 0, 0, 0,
-            ]),
+            ],
         ];
 
         let expected = [
-            Vec::from([
-                Vec::from([1, 2, 3]),    //
-                Vec::from([7, 8, 9]),    //
-                Vec::from([13, 14, 15]), //
-                Vec::from([21, 22, 23]),
-            ]),
-            Vec::from([
-                Vec::from([11, 12, 13]), //
-                Vec::from([12, 13, 14]), //
-                Vec::from([13, 14, 15]), //
-                Vec::from([21, 22, 23]),
-            ]),
-            Vec::from([]),
-            Vec::from([Vec::from([21, 22, 23])]),
+            vec![
+                vec![1, 2, 3],    //
+                vec![7, 8, 9],    //
+                vec![13, 14, 15], //
+                vec![21, 22, 23],
+            ],
+            vec![
+                vec![11, 12, 13], //
+                vec![12, 13, 14], //
+                vec![13, 14, 15], //
+                vec![21, 22, 23],
+            ],
+            vec![],
+            vec![vec![21, 22, 23]],
         ];
 
         assert_eq!(find_shuntsu(hands[0].as_mut()), expected[0]);
@@ -517,18 +513,18 @@ mod tests {
     #[test]
     pub fn test_find_janto() {
         let hands = [
-            Vec::from([
+            vec![
                 1, 1, 1, 0, 0, 0, 1, 1, 1, //
                 0, 0, 0, 1, 1, 1, 0, 2, 0, //
                 0, 0, 1, 1, 1, 0, 0, 0, 0, //
                 0, 0, 0, 0, 0, 0, 0,
-            ]),
-            Vec::from([
+            ],
+            vec![
                 1, 1, 1, 0, 0, 0, 1, 1, 1, //
                 0, 0, 0, 1, 1, 1, 0, 1, 1, //
                 0, 0, 1, 1, 1, 0, 0, 0, 0, //
                 0, 0, 0, 0, 0, 0, 0,
-            ]),
+            ],
         ];
 
         assert_eq!(find_janto(&hands[0], -1), 16);
@@ -538,201 +534,201 @@ mod tests {
     #[test]
     pub fn test_find_all_agari_patterns() {
         let test_cases = [
-            Vec::from([
+            vec![
                 2, 2, 0, 2, 0, 0, 2, 2, 2, //
                 0, 0, 2, 0, 0, 0, 0, 0, 0, //
                 0, 0, 0, 0, 0, 0, 0, 0, 0, //
                 0, 0, 0, 0, 0, 0, 0,
-            ]),
-            Vec::from([
+            ],
+            vec![
                 1, 0, 0, 0, 0, 0, 0, 0, 1, //
                 1, 0, 0, 0, 0, 0, 0, 0, 1, //
                 1, 0, 0, 0, 0, 0, 0, 0, 1, //
                 1, 2, 1, 1, 1, 1, 1,
-            ]),
-            Vec::from([
+            ],
+            vec![
                 0, 0, 0, 0, 0, 2, 2, 2, 0, //
                 0, 0, 0, 0, 0, 0, 1, 1, 1, //
                 0, 0, 2, 0, 0, 0, 0, 0, 0, //
                 0, 0, 0, 0, 0, 3, 0,
-            ]),
-            Vec::from([
+            ],
+            vec![
                 2, 2, 2, 2, 0, 0, 2, 2, 2, //
                 0, 0, 0, 0, 0, 0, 0, 0, 0, //
                 0, 0, 0, 0, 0, 0, 0, 0, 0, //
                 0, 0, 0, 0, 0, 0, 0,
-            ]),
-            Vec::from([
+            ],
+            vec![
                 0, 0, 0, 0, 0, 2, 2, 2, 2, //
                 0, 0, 0, 0, 0, 0, 1, 1, 1, //
                 0, 0, 0, 0, 0, 0, 0, 0, 0, //
                 0, 0, 0, 0, 0, 3, 0,
-            ]),
-            Vec::from([
+            ],
+            vec![
                 4, 4, 4, 2, 0, 0, 0, 0, 0, //
                 0, 0, 0, 0, 0, 0, 0, 0, 0, //
                 0, 0, 0, 0, 0, 0, 0, 0, 0, //
                 0, 0, 0, 0, 0, 0, 0,
-            ]),
-            Vec::from([
+            ],
+            vec![
                 3, 1, 1, 3, 0, 0, 0, 0, 0, //
                 3, 0, 0, 0, 0, 0, 0, 0, 0, //
                 3, 0, 0, 0, 0, 0, 0, 0, 0, //
                 0, 0, 0, 0, 0, 0, 0,
-            ]),
-            Vec::from([
+            ],
+            vec![
                 0, 2, 2, 2, 2, 2, 2, 2, 0, //
                 0, 0, 0, 0, 0, 0, 0, 0, 0, //
                 0, 0, 0, 0, 0, 0, 0, 0, 0, //
                 0, 0, 0, 0, 0, 0, 0,
-            ]),
+            ],
             // incomplete hand should be fine too
-            Vec::from([
+            vec![
                 1, 1, 1, 0, 0, 0, 0, 0, 0, //
                 0, 1, 1, 1, 0, 0, 0, 0, 0, //
                 0, 0, 1, 1, 1, 0, 0, 0, 0, //
                 2, 0, 0, 0, 0, 0, 0, //
-            ]),
+            ],
         ];
 
         let expected = [
-            digest_all(Vec::from([Vec::from([
-                Vec::from([1, 1]),
-                Vec::from([2, 2]),
-                Vec::from([12, 12]),
-                Vec::from([4, 4]),
-                Vec::from([7, 7]),
-                Vec::from([8, 8]),
-                Vec::from([9, 9]),
-            ])])),
-            digest_all(Vec::from([Vec::from([Vec::from([
+            digest_all(vec![vec![
+                vec![1, 1],
+                vec![2, 2],
+                vec![12, 12],
+                vec![4, 4],
+                vec![7, 7],
+                vec![8, 8],
+                vec![9, 9],
+            ]]),
+            digest_all(vec![vec![vec![
                 1, 9, 10, 18, 19, 27, 28, 29, 29, 30, 31, 32, 33, 34,
-            ])])])),
-            digest_all(Vec::from([Vec::from([
-                Vec::from([21, 21]),
-                Vec::from([6, 7, 8]),
-                Vec::from([6, 7, 8]),
-                Vec::from([33, 33, 33]),
-                Vec::from([16, 17, 18]),
-            ])])),
-            digest_all(Vec::from([
-                Vec::from([
-                    Vec::from([1, 1]),
-                    Vec::from([2, 3, 4]),
-                    Vec::from([2, 3, 4]),
-                    Vec::from([7, 8, 9]),
-                    Vec::from([7, 8, 9]),
-                ]),
-                Vec::from([
-                    Vec::from([1, 2, 3]),
-                    Vec::from([1, 2, 3]),
-                    Vec::from([4, 4]),
-                    Vec::from([7, 8, 9]),
-                    Vec::from([7, 8, 9]),
-                ]),
-                Vec::from([
-                    Vec::from([1, 1]),
-                    Vec::from([2, 2]),
-                    Vec::from([3, 3]),
-                    Vec::from([4, 4]),
-                    Vec::from([7, 7]),
-                    Vec::from([8, 8]),
-                    Vec::from([9, 9]),
-                ]),
-            ])),
-            digest_all(Vec::from([
-                Vec::from([
-                    Vec::from([6, 6]),
-                    Vec::from([33, 33, 33]),
-                    Vec::from([7, 8, 9]),
-                    Vec::from([7, 8, 9]),
-                    Vec::from([16, 17, 18]),
-                ]),
-                Vec::from([
-                    Vec::from([6, 7, 8]),
-                    Vec::from([6, 7, 8]),
-                    Vec::from([33, 33, 33]),
-                    Vec::from([16, 17, 18]),
-                    Vec::from([9, 9]),
-                ]),
-            ])),
-            digest_all(Vec::from([
-                Vec::from([
-                    Vec::from([1, 1]),
-                    Vec::from([1, 2, 3]),
-                    Vec::from([1, 2, 3]),
-                    Vec::from([2, 3, 4]),
-                    Vec::from([2, 3, 4]),
-                ]),
-                Vec::from([
-                    Vec::from([1, 1, 1]),
-                    Vec::from([1, 2, 3]),
-                    Vec::from([2, 2, 2]),
-                    Vec::from([3, 3, 3]),
-                    Vec::from([4, 4]),
-                ]),
-                Vec::from([
-                    Vec::from([1, 2, 3]),
-                    Vec::from([1, 2, 3]),
-                    Vec::from([1, 2, 3]),
-                    Vec::from([1, 2, 3]),
-                    Vec::from([4, 4]),
-                ]),
-            ])),
-            digest_all(Vec::from([
-                Vec::from([
-                    Vec::from([1, 1]),
-                    Vec::from([1, 2, 3]),
-                    Vec::from([10, 10, 10]),
-                    Vec::from([19, 19, 19]),
-                    Vec::from([4, 4, 4]),
-                ]),
-                Vec::from([
-                    Vec::from([1, 1, 1]),
-                    Vec::from([10, 10, 10]),
-                    Vec::from([19, 19, 19]),
-                    Vec::from([2, 3, 4]),
-                    Vec::from([4, 4]),
-                ]),
-            ])),
-            digest_all(Vec::from([
-                Vec::from([
-                    Vec::from([2, 2]),
-                    Vec::from([3, 4, 5]),
-                    Vec::from([3, 4, 5]),
-                    Vec::from([6, 7, 8]),
-                    Vec::from([6, 7, 8]),
-                ]),
-                Vec::from([
-                    Vec::from([2, 3, 4]),
-                    Vec::from([2, 3, 4]),
-                    Vec::from([5, 5]),
-                    Vec::from([6, 7, 8]),
-                    Vec::from([6, 7, 8]),
-                ]),
-                Vec::from([
-                    Vec::from([2, 3, 4]),
-                    Vec::from([2, 3, 4]),
-                    Vec::from([5, 6, 7]),
-                    Vec::from([5, 6, 7]),
-                    Vec::from([8, 8]),
-                ]),
-                Vec::from([
-                    Vec::from([2, 2]),
-                    Vec::from([3, 3]),
-                    Vec::from([4, 4]),
-                    Vec::from([5, 5]),
-                    Vec::from([6, 6]),
-                    Vec::from([7, 7]),
-                    Vec::from([8, 8]),
-                ]),
-            ])),
-            digest_all(Vec::from([Vec::from([
-                Vec::from([1, 2, 3]),
-                Vec::from([11, 12, 13]),
-                Vec::from([21, 22, 23]),
-                Vec::from([28, 28]),
-            ])])),
+            ]]]),
+            digest_all(vec![vec![
+                vec![21, 21],
+                vec![6, 7, 8],
+                vec![6, 7, 8],
+                vec![33, 33, 33],
+                vec![16, 17, 18],
+            ]]),
+            digest_all(vec![
+                vec![
+                    vec![1, 1],
+                    vec![2, 3, 4],
+                    vec![2, 3, 4],
+                    vec![7, 8, 9],
+                    vec![7, 8, 9],
+                ],
+                vec![
+                    vec![1, 2, 3],
+                    vec![1, 2, 3],
+                    vec![4, 4],
+                    vec![7, 8, 9],
+                    vec![7, 8, 9],
+                ],
+                vec![
+                    vec![1, 1],
+                    vec![2, 2],
+                    vec![3, 3],
+                    vec![4, 4],
+                    vec![7, 7],
+                    vec![8, 8],
+                    vec![9, 9],
+                ],
+            ]),
+            digest_all(vec![
+                vec![
+                    vec![6, 6],
+                    vec![33, 33, 33],
+                    vec![7, 8, 9],
+                    vec![7, 8, 9],
+                    vec![16, 17, 18],
+                ],
+                vec![
+                    vec![6, 7, 8],
+                    vec![6, 7, 8],
+                    vec![33, 33, 33],
+                    vec![16, 17, 18],
+                    vec![9, 9],
+                ],
+            ]),
+            digest_all(vec![
+                vec![
+                    vec![1, 1],
+                    vec![1, 2, 3],
+                    vec![1, 2, 3],
+                    vec![2, 3, 4],
+                    vec![2, 3, 4],
+                ],
+                vec![
+                    vec![1, 1, 1],
+                    vec![1, 2, 3],
+                    vec![2, 2, 2],
+                    vec![3, 3, 3],
+                    vec![4, 4],
+                ],
+                vec![
+                    vec![1, 2, 3],
+                    vec![1, 2, 3],
+                    vec![1, 2, 3],
+                    vec![1, 2, 3],
+                    vec![4, 4],
+                ],
+            ]),
+            digest_all(vec![
+                vec![
+                    vec![1, 1],
+                    vec![1, 2, 3],
+                    vec![10, 10, 10],
+                    vec![19, 19, 19],
+                    vec![4, 4, 4],
+                ],
+                vec![
+                    vec![1, 1, 1],
+                    vec![10, 10, 10],
+                    vec![19, 19, 19],
+                    vec![2, 3, 4],
+                    vec![4, 4],
+                ],
+            ]),
+            digest_all(vec![
+                vec![
+                    vec![2, 2],
+                    vec![3, 4, 5],
+                    vec![3, 4, 5],
+                    vec![6, 7, 8],
+                    vec![6, 7, 8],
+                ],
+                vec![
+                    vec![2, 3, 4],
+                    vec![2, 3, 4],
+                    vec![5, 5],
+                    vec![6, 7, 8],
+                    vec![6, 7, 8],
+                ],
+                vec![
+                    vec![2, 3, 4],
+                    vec![2, 3, 4],
+                    vec![5, 6, 7],
+                    vec![5, 6, 7],
+                    vec![8, 8],
+                ],
+                vec![
+                    vec![2, 2],
+                    vec![3, 3],
+                    vec![4, 4],
+                    vec![5, 5],
+                    vec![6, 6],
+                    vec![7, 7],
+                    vec![8, 8],
+                ],
+            ]),
+            digest_all(vec![vec![
+                vec![1, 2, 3],
+                vec![11, 12, 13],
+                vec![21, 22, 23],
+                vec![28, 28],
+            ]]),
         ];
 
         for i in 0..8 {

@@ -1,5 +1,8 @@
-use crate::agari::{check, check7, check13};
-use crate::constants::{Suit, Tiles, is19, slice_by_suit, sum};
+use crate::agari::{check7, check13};
+use crate::constants::{
+    CHI_START, GREENS, HONORS, SIMPLE_TILES, Suit, TERMINALS, TERMINALS_AND_HONORS, Tiles, WINDS,
+    is19, slice_by_suit, sum,
+};
 
 pub struct YakuCheckInput<'t> {
     pub(crate) haipai: &'t Vec<i32>,
@@ -27,93 +30,6 @@ pub struct YakuCheck {
     pub(crate) is_furo_minus: bool,
     pub(crate) check: fn(&YakuCheckInput) -> bool,
 }
-
-static GREENS: [i32; 6] = [
-    Tiles::S2 as i32,
-    Tiles::S3 as i32,
-    Tiles::S4 as i32,
-    Tiles::S6 as i32,
-    Tiles::S8 as i32,
-    Tiles::GD as i32,
-];
-
-static WINDS: [i32; 4] = [
-    Tiles::E as i32,
-    Tiles::S as i32,
-    Tiles::W as i32,
-    Tiles::N as i32,
-];
-
-static HONORS: [i32; 7] = [
-    Tiles::E as i32,
-    Tiles::S as i32,
-    Tiles::W as i32,
-    Tiles::N as i32,
-    Tiles::GD as i32,
-    Tiles::RD as i32,
-    Tiles::WD as i32,
-];
-
-static TERMINALS: [i32; 6] = [
-    Tiles::M1 as i32,
-    Tiles::M9 as i32,
-    Tiles::S1 as i32,
-    Tiles::S9 as i32,
-    Tiles::P1 as i32,
-    Tiles::P9 as i32,
-];
-
-static TERMINALS_AND_HONORS: [i32; 13] = [
-    Tiles::M1 as i32,
-    Tiles::M9 as i32,
-    Tiles::S1 as i32,
-    Tiles::S9 as i32,
-    Tiles::P1 as i32,
-    Tiles::P9 as i32,
-    Tiles::E as i32,
-    Tiles::S as i32,
-    Tiles::W as i32,
-    Tiles::N as i32,
-    Tiles::GD as i32,
-    Tiles::RD as i32,
-    Tiles::WD as i32,
-];
-
-static CHI_START: [i32; 9] = [
-    Tiles::M1 as i32,
-    Tiles::M4 as i32,
-    Tiles::M7 as i32,
-    Tiles::P1 as i32,
-    Tiles::P4 as i32,
-    Tiles::P7 as i32,
-    Tiles::S1 as i32,
-    Tiles::S4 as i32,
-    Tiles::S7 as i32,
-];
-
-static SIMPLE_TILES: [i32; 21] = [
-    Tiles::M2 as i32,
-    Tiles::M3 as i32,
-    Tiles::M4 as i32,
-    Tiles::M5 as i32,
-    Tiles::M6 as i32,
-    Tiles::M7 as i32,
-    Tiles::M8 as i32,
-    Tiles::P2 as i32,
-    Tiles::P3 as i32,
-    Tiles::P4 as i32,
-    Tiles::P5 as i32,
-    Tiles::P6 as i32,
-    Tiles::P7 as i32,
-    Tiles::P8 as i32,
-    Tiles::S2 as i32,
-    Tiles::S3 as i32,
-    Tiles::S4 as i32,
-    Tiles::S5 as i32,
-    Tiles::S6 as i32,
-    Tiles::S7 as i32,
-    Tiles::S8 as i32,
-];
 
 fn check_allowed(haipai: &Vec<i32>, furo: &Vec<Vec<i32>>, allowed: &Vec<i32>) -> bool {
     for v in haipai {
