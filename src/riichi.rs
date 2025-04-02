@@ -2151,7 +2151,7 @@ mod tests {
     }
 
     #[test]
-    pub fn debug_1_should_parse_double_riichi_tsumo_ittsu_10dora() {
+    pub fn debug_2_should_parse_double_riichi_tsumo_ittsu_10dora() {
         let res = calc_riichi(
             RiichiHand {
                 closed_part: vec![
@@ -2221,5 +2221,59 @@ mod tests {
             ]
         );
         assert_eq!(r.yakuman, 0);
+    }
+
+    #[test]
+    pub fn debug_3_should_parse_chuurenpoto() {
+        let res = calc_riichi(
+            RiichiHand {
+                closed_part: vec![
+                    Tiles::P1 as i32,
+                    Tiles::P1 as i32,
+                    Tiles::P2 as i32,
+                    Tiles::P2 as i32,
+                    Tiles::P3 as i32,
+                    Tiles::P4 as i32,
+                    Tiles::P5 as i32,
+                    Tiles::P6 as i32,
+                    Tiles::P7 as i32,
+                    Tiles::P8 as i32,
+                    Tiles::P9 as i32,
+                    Tiles::P9 as i32,
+                    Tiles::P9 as i32,
+                ],
+                open_part: vec![],
+            },
+            &mut RiichiOptions {
+                dora: vec![Tiles::S8 as i32, Tiles::M5 as i32],
+                aka_count: 0,
+                first_take: false,
+                riichi: false,
+                ippatsu: false,
+                double_riichi: false,
+                after_kan: false,
+                tile_discarded_by_someone: Tiles::P1 as i32,
+                bakaze: Tiles::E as i32,
+                jikaze: Tiles::S as i32,
+                allow_aka: true,
+                allow_kuitan: true,
+                with_kiriage: false,
+                disabled_yaku: vec![],
+                local_yaku_enabled: vec![],
+                all_local_yaku_enabled: false,
+                allow_double_yakuman: false,
+                last_tile: false,
+            },
+            false,
+        );
+
+        assert!(!res.is_err());
+        let r = res.unwrap();
+        assert_eq!(r.fu, 50);
+        assert_eq!(r.han, 0);
+        assert_eq!(r.is_agari, true);
+        assert_eq!(r.ten, 32000);
+        assert_eq!(r.yaku, vec![(Yaku::Chuurenpoto as i32, 13),]);
+        assert_eq!(r.yakuman, 1);
     }
 }

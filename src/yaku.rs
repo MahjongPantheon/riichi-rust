@@ -160,7 +160,8 @@ fn yaku_check_chuurenpoto_9_sides(i: &YakuCheckInput) -> bool {
     {
         return false;
     }
-    i.taken_tile != -1 && [2, 4].contains(&slices[found_suit as usize][(i.taken_tile % 9) as usize])
+    i.taken_tile != -1
+        && [2, 4].contains(&slices[found_suit as usize][((i.taken_tile - 1) % 9) as usize])
 }
 
 fn yaku_check_chuurenpoto(i: &YakuCheckInput) -> bool {
@@ -173,7 +174,8 @@ fn yaku_check_chuurenpoto(i: &YakuCheckInput) -> bool {
     {
         return false;
     }
-    i.taken_tile != -1 && [1, 3].contains(&slices[found_suit as usize][(i.taken_tile % 9) as usize])
+    i.taken_tile != -1
+        && [1, 3].contains(&slices[found_suit as usize][((i.taken_tile - 1) % 9) as usize])
 }
 
 fn yaku_check_suuankou_tanki(i: &YakuCheckInput) -> bool {
