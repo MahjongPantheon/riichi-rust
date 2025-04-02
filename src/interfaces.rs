@@ -27,7 +27,6 @@ pub struct RiichiOptions {
     pub local_yaku_enabled: Vec<i32>,
     pub all_local_yaku_enabled: bool,
     pub allow_double_yakuman: bool,
-    pub taken_tile: i32,
 }
 
 #[derive(Serialize, Deserialize)]

@@ -6,7 +6,7 @@ use crate::yaku::{YAKU_SETTINGS, YakuCheckInput};
 
 pub fn calc_riichi(
     hand: RiichiHand,
-    options: &RiichiOptions,
+    options: &mut RiichiOptions,
     calc_hairi: bool,
 ) -> Result<RiichiResult, String> {
     // Closed part
@@ -22,15 +22,13 @@ pub fn calc_riichi(
         0, 0, 0, 0, 0, 0, 0,
     ];
 
-    let taken_tile: i32;
     let is_tsumo: bool;
 
     if options.tile_discarded_by_someone != -1 {
-        taken_tile = options.tile_discarded_by_someone;
-        haipai.push(taken_tile);
+        haipai.push(options.tile_discarded_by_someone);
         is_tsumo = false;
     } else {
-        taken_tile = haipai.last().unwrap().clone();
+        options.tile_discarded_by_someone = haipai.last().unwrap().clone();
         is_tsumo = true;
     }
 
@@ -66,7 +64,6 @@ pub fn calc_riichi(
         &options.dora,
         options,
         is_tsumo,
-        taken_tile,
         calc_hairi,
     )
 }
@@ -320,7 +317,6 @@ fn calc_yaku(
     current_pattern: &Vec<Vec<i32>>,
     settings: &RiichiOptions,
     is_tsumo: bool,
-    taken_tile: i32,
 ) -> (Vec<(i32, i32)>, i32, i32) {
     let mut yaku_list: Vec<(i32, i32)> = Vec::new();
     let mut yakuman = 0;
@@ -331,7 +327,7 @@ fn calc_yaku(
         haipai34,
         furo,
         current_pattern,
-        taken_tile,
+        taken_tile: settings.tile_discarded_by_someone,
         is_tsumo,
         jikaze: settings.jikaze,
         bakaze: settings.bakaze,
@@ -393,7 +389,6 @@ fn calc_all(
     dora: &Vec<i32>,
     opts: &RiichiOptions,
     is_tsumo: bool,
-    taken_tile: i32,
     calc_hairi: bool,
 ) -> Result<RiichiResult, String> {
     let mut result = RiichiResult {
@@ -426,15 +421,8 @@ fn calc_all(
         for f in furo {
             current_pattern.push(f.clone());
         }
-        let (mut yaku_list, yakuman, mut han) = calc_yaku(
-            haipai,
-            haipai34,
-            furo,
-            &current_pattern,
-            &opts,
-            is_tsumo,
-            taken_tile,
-        );
+        let (mut yaku_list, yakuman, mut han) =
+            calc_yaku(haipai, haipai34, furo, &current_pattern, &opts, is_tsumo);
         if yakuman == 0 && han == 0 {
             continue;
         }
@@ -456,7 +444,7 @@ fn calc_all(
                 opts.bakaze,
                 opts.jikaze,
                 yaku_list.iter().map(|(y, _c)| *y).collect::<Vec<i32>>(),
-                taken_tile,
+                opts.tile_discarded_by_someone,
                 &v,
                 furo,
             )
@@ -515,7 +503,7 @@ mod tests {
                     vec![Tiles::WD as i32, Tiles::WD as i32, Tiles::WD as i32],
                 )],
             },
-            &RiichiOptions {
+            &mut RiichiOptions {
                 dora: vec![],
                 aka_count: 0,
                 first_take: false,
@@ -533,7 +521,6 @@ mod tests {
                 local_yaku_enabled: vec![],
                 all_local_yaku_enabled: false,
                 allow_double_yakuman: false,
-                taken_tile: -1,
                 last_tile: false,
             },
             false,
@@ -571,7 +558,7 @@ mod tests {
                 ],
                 open_part: vec![],
             },
-            &RiichiOptions {
+            &mut RiichiOptions {
                 dora: vec![],
                 aka_count: 0,
                 first_take: false,
@@ -589,7 +576,6 @@ mod tests {
                 local_yaku_enabled: vec![],
                 all_local_yaku_enabled: false,
                 allow_double_yakuman: false,
-                taken_tile: -1,
                 last_tile: false,
             },
             false,
@@ -634,7 +620,7 @@ mod tests {
                     ),
                 ],
             },
-            &RiichiOptions {
+            &mut RiichiOptions {
                 dora: vec![],
                 aka_count: 0,
                 first_take: false,
@@ -652,7 +638,6 @@ mod tests {
                 local_yaku_enabled: vec![],
                 all_local_yaku_enabled: false,
                 allow_double_yakuman: false,
-                taken_tile: -1,
                 last_tile: false,
             },
             false,
@@ -698,7 +683,7 @@ mod tests {
                     ),
                 ],
             },
-            &RiichiOptions {
+            &mut RiichiOptions {
                 dora: vec![],
                 aka_count: 0,
                 first_take: false,
@@ -716,7 +701,6 @@ mod tests {
                 local_yaku_enabled: vec![],
                 all_local_yaku_enabled: false,
                 allow_double_yakuman: false,
-                taken_tile: -1,
                 last_tile: false,
             },
             false,
@@ -758,7 +742,7 @@ mod tests {
                 ],
                 open_part: vec![],
             },
-            &RiichiOptions {
+            &mut RiichiOptions {
                 dora: vec![],
                 aka_count: 0,
                 first_take: false,
@@ -776,7 +760,6 @@ mod tests {
                 local_yaku_enabled: vec![],
                 all_local_yaku_enabled: false,
                 allow_double_yakuman: false,
-                taken_tile: -1,
                 last_tile: false,
             },
             false,
@@ -818,7 +801,7 @@ mod tests {
                 ],
                 open_part: vec![],
             },
-            &RiichiOptions {
+            &mut RiichiOptions {
                 dora: vec![],
                 aka_count: 0,
                 first_take: false,
@@ -836,7 +819,6 @@ mod tests {
                 local_yaku_enabled: vec![],
                 all_local_yaku_enabled: false,
                 allow_double_yakuman: false,
-                taken_tile: -1,
                 last_tile: false,
             },
             false,
@@ -885,7 +867,7 @@ mod tests {
                     ),
                 ],
             },
-            &RiichiOptions {
+            &mut RiichiOptions {
                 dora: vec![],
                 aka_count: 0,
                 first_take: false,
@@ -903,7 +885,6 @@ mod tests {
                 local_yaku_enabled: vec![],
                 all_local_yaku_enabled: false,
                 allow_double_yakuman: false,
-                taken_tile: -1,
                 last_tile: false,
             },
             false,
@@ -949,7 +930,7 @@ mod tests {
                 ],
                 open_part: vec![],
             },
-            &RiichiOptions {
+            &mut RiichiOptions {
                 dora: vec![],
                 aka_count: 0,
                 first_take: false,
@@ -967,7 +948,6 @@ mod tests {
                 local_yaku_enabled: vec![],
                 all_local_yaku_enabled: false,
                 allow_double_yakuman: false,
-                taken_tile: -1,
                 last_tile: false,
             },
             false,
@@ -1014,7 +994,7 @@ mod tests {
                 ],
                 open_part: vec![],
             },
-            &RiichiOptions {
+            &mut RiichiOptions {
                 dora: vec![],
                 aka_count: 0,
                 first_take: false,
@@ -1032,7 +1012,6 @@ mod tests {
                 local_yaku_enabled: vec![],
                 all_local_yaku_enabled: false,
                 allow_double_yakuman: false,
-                taken_tile: -1,
                 last_tile: false,
             },
             false,
@@ -1078,7 +1057,7 @@ mod tests {
                     vec![Tiles::WD as i32, Tiles::WD as i32, Tiles::WD as i32],
                 )],
             },
-            &RiichiOptions {
+            &mut RiichiOptions {
                 dora: vec![],
                 aka_count: 0,
                 first_take: false,
@@ -1096,7 +1075,6 @@ mod tests {
                 local_yaku_enabled: vec![],
                 all_local_yaku_enabled: false,
                 allow_double_yakuman: false,
-                taken_tile: -1,
                 last_tile: false,
             },
             false,
@@ -1137,7 +1115,7 @@ mod tests {
                 ],
                 open_part: vec![],
             },
-            &RiichiOptions {
+            &mut RiichiOptions {
                 dora: vec![],
                 aka_count: 0,
                 first_take: false,
@@ -1155,7 +1133,6 @@ mod tests {
                 local_yaku_enabled: vec![],
                 all_local_yaku_enabled: false,
                 allow_double_yakuman: false,
-                taken_tile: -1,
                 last_tile: false,
             },
             false,
@@ -1203,7 +1180,7 @@ mod tests {
                     ),
                 ],
             },
-            &RiichiOptions {
+            &mut RiichiOptions {
                 dora: vec![],
                 aka_count: 0,
                 first_take: false,
@@ -1221,7 +1198,6 @@ mod tests {
                 local_yaku_enabled: vec![],
                 all_local_yaku_enabled: false,
                 allow_double_yakuman: false,
-                taken_tile: -1,
                 last_tile: false,
             },
             false,
@@ -1266,7 +1242,7 @@ mod tests {
                 ],
                 open_part: vec![],
             },
-            &RiichiOptions {
+            &mut RiichiOptions {
                 dora: vec![],
                 aka_count: 0,
                 first_take: false,
@@ -1284,7 +1260,6 @@ mod tests {
                 local_yaku_enabled: vec![],
                 all_local_yaku_enabled: false,
                 allow_double_yakuman: false,
-                taken_tile: -1,
                 last_tile: false,
             },
             false,
@@ -1327,7 +1302,7 @@ mod tests {
                     ),
                 ],
             },
-            &RiichiOptions {
+            &mut RiichiOptions {
                 dora: vec![],
                 aka_count: 0,
                 first_take: false,
@@ -1345,7 +1320,6 @@ mod tests {
                 local_yaku_enabled: vec![],
                 all_local_yaku_enabled: false,
                 allow_double_yakuman: false,
-                taken_tile: -1,
                 last_tile: false,
             },
             false,
@@ -1385,7 +1359,7 @@ mod tests {
                 ],
                 open_part: vec![],
             },
-            &RiichiOptions {
+            &mut RiichiOptions {
                 dora: vec![],
                 aka_count: 0,
                 first_take: false,
@@ -1403,7 +1377,6 @@ mod tests {
                 local_yaku_enabled: vec![],
                 all_local_yaku_enabled: false,
                 allow_double_yakuman: false,
-                taken_tile: -1,
                 last_tile: false,
             },
             false,
@@ -1444,7 +1417,7 @@ mod tests {
                 ],
                 open_part: vec![],
             },
-            &RiichiOptions {
+            &mut RiichiOptions {
                 dora: vec![],
                 aka_count: 0,
                 first_take: false,
@@ -1462,7 +1435,6 @@ mod tests {
                 local_yaku_enabled: vec![],
                 all_local_yaku_enabled: false,
                 allow_double_yakuman: false,
-                taken_tile: -1,
                 last_tile: false,
             },
             false,
@@ -1530,7 +1502,7 @@ mod tests {
                     ),
                 ],
             },
-            &RiichiOptions {
+            &mut RiichiOptions {
                 dora: vec![],
                 aka_count: 0,
                 first_take: false,
@@ -1548,7 +1520,6 @@ mod tests {
                 local_yaku_enabled: vec![],
                 all_local_yaku_enabled: false,
                 allow_double_yakuman: false,
-                taken_tile: -1,
                 last_tile: false,
             },
             false,
@@ -1605,7 +1576,7 @@ mod tests {
                     ),
                 ],
             },
-            &RiichiOptions {
+            &mut RiichiOptions {
                 dora: vec![],
                 aka_count: 0,
                 first_take: false,
@@ -1623,7 +1594,6 @@ mod tests {
                 local_yaku_enabled: vec![],
                 all_local_yaku_enabled: false,
                 allow_double_yakuman: false,
-                taken_tile: -1,
                 last_tile: false,
             },
             false,
@@ -1667,7 +1637,7 @@ mod tests {
                     vec![Tiles::S4 as i32, Tiles::S4 as i32, Tiles::S4 as i32],
                 )],
             },
-            &RiichiOptions {
+            &mut RiichiOptions {
                 dora: vec![],
                 aka_count: 0,
                 first_take: false,
@@ -1685,7 +1655,6 @@ mod tests {
                 local_yaku_enabled: vec![],
                 all_local_yaku_enabled: false,
                 allow_double_yakuman: false,
-                taken_tile: -1,
                 last_tile: false,
             },
             false,
@@ -1730,7 +1699,7 @@ mod tests {
                 ],
                 open_part: vec![],
             },
-            &RiichiOptions {
+            &mut RiichiOptions {
                 dora: vec![],
                 aka_count: 0,
                 first_take: false,
@@ -1748,7 +1717,6 @@ mod tests {
                 local_yaku_enabled: vec![],
                 all_local_yaku_enabled: false,
                 allow_double_yakuman: false,
-                taken_tile: -1,
                 last_tile: false,
             },
             false,
@@ -1787,7 +1755,7 @@ mod tests {
                 ],
                 open_part: vec![],
             },
-            &RiichiOptions {
+            &mut RiichiOptions {
                 dora: vec![],
                 aka_count: 0,
                 first_take: false,
@@ -1805,7 +1773,6 @@ mod tests {
                 local_yaku_enabled: vec![],
                 all_local_yaku_enabled: false,
                 allow_double_yakuman: false,
-                taken_tile: -1,
                 last_tile: false,
             },
             false,
@@ -1850,7 +1817,7 @@ mod tests {
                     vec![Tiles::S3 as i32, Tiles::S1 as i32, Tiles::S2 as i32],
                 )],
             },
-            &RiichiOptions {
+            &mut RiichiOptions {
                 dora: vec![],
                 aka_count: 0,
                 first_take: false,
@@ -1868,7 +1835,6 @@ mod tests {
                 local_yaku_enabled: vec![],
                 all_local_yaku_enabled: false,
                 allow_double_yakuman: false,
-                taken_tile: -1,
                 last_tile: false,
             },
             false,
@@ -1908,7 +1874,7 @@ mod tests {
                 ],
                 open_part: vec![],
             },
-            &RiichiOptions {
+            &mut RiichiOptions {
                 dora: vec![],
                 aka_count: 0,
                 first_take: false,
@@ -1926,7 +1892,6 @@ mod tests {
                 local_yaku_enabled: vec![],
                 all_local_yaku_enabled: false,
                 allow_double_yakuman: false,
-                taken_tile: -1,
                 last_tile: false,
             },
             false,
@@ -1966,7 +1931,7 @@ mod tests {
                 ],
                 open_part: vec![],
             },
-            &RiichiOptions {
+            &mut RiichiOptions {
                 dora: vec![],
                 aka_count: 0,
                 first_take: false,
@@ -1984,7 +1949,6 @@ mod tests {
                 local_yaku_enabled: vec![],
                 all_local_yaku_enabled: false,
                 allow_double_yakuman: false,
-                taken_tile: -1,
                 last_tile: false,
             },
             false,
@@ -2033,7 +1997,7 @@ mod tests {
                     ),
                 ],
             },
-            &RiichiOptions {
+            &mut RiichiOptions {
                 dora: vec![],
                 aka_count: 0,
                 first_take: false,
@@ -2051,7 +2015,6 @@ mod tests {
                 local_yaku_enabled: vec![],
                 all_local_yaku_enabled: false,
                 allow_double_yakuman: false,
-                taken_tile: -1,
                 last_tile: false,
             },
             false,
@@ -2095,7 +2058,7 @@ mod tests {
                     ),
                 ],
             },
-            &RiichiOptions {
+            &mut RiichiOptions {
                 dora: vec![],
                 aka_count: 0,
                 first_take: false,
@@ -2113,7 +2076,6 @@ mod tests {
                 local_yaku_enabled: vec![],
                 all_local_yaku_enabled: false,
                 allow_double_yakuman: false,
-                taken_tile: -1,
                 last_tile: false,
             },
             false,
@@ -2151,7 +2113,7 @@ mod tests {
                 ],
                 open_part: vec![],
             },
-            &RiichiOptions {
+            &mut RiichiOptions {
                 dora: vec![],
                 aka_count: 0,
                 first_take: false,
@@ -2169,7 +2131,6 @@ mod tests {
                 local_yaku_enabled: vec![],
                 all_local_yaku_enabled: false,
                 allow_double_yakuman: false,
-                taken_tile: -1,
                 last_tile: false,
             },
             false,
@@ -2216,7 +2177,7 @@ mod tests {
                     ],
                 )],
             },
-            &RiichiOptions {
+            &mut RiichiOptions {
                 dora: vec![
                     Tiles::S5 as i32,
                     Tiles::M1 as i32,
@@ -2239,7 +2200,6 @@ mod tests {
                 local_yaku_enabled: vec![],
                 all_local_yaku_enabled: false,
                 allow_double_yakuman: false,
-                taken_tile: -1,
                 last_tile: false,
             },
             false,
