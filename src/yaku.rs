@@ -6,14 +6,14 @@ use crate::constants::{
 use std::collections::HashSet;
 
 pub struct YakuCheckInput<'t> {
-    pub(crate) haipai: &'t Vec<i32>,
-    pub(crate) haipai34: &'t Vec<i32>,
-    pub(crate) furo: &'t Vec<Vec<i32>>,
-    pub(crate) current_pattern: &'t Vec<Vec<i32>>,
-    pub(crate) taken_tile: i32,
+    pub(crate) haipai: &'t Vec<i8>,
+    pub(crate) haipai34: &'t Vec<i8>,
+    pub(crate) furo: &'t Vec<Vec<i8>>,
+    pub(crate) current_pattern: &'t Vec<Vec<i8>>,
+    pub(crate) taken_tile: i8,
     pub(crate) is_tsumo: bool,
-    pub(crate) jikaze: i32,
-    pub(crate) bakaze: i32,
+    pub(crate) jikaze: i8,
+    pub(crate) bakaze: i8,
     pub(crate) first_take: bool,
     pub(crate) riichi: bool,
     pub(crate) double_riichi: bool,
@@ -25,14 +25,14 @@ pub struct YakuCheckInput<'t> {
 
 pub struct YakuCheck {
     pub(crate) is_local: bool,
-    pub(crate) yakuman: i32,
-    pub(crate) han: i32,
+    pub(crate) yakuman: i8,
+    pub(crate) han: i8,
     pub(crate) is_menzen_only: bool,
     pub(crate) is_furo_minus: bool,
     pub(crate) check: fn(&YakuCheckInput) -> bool,
 }
 
-fn check_allowed(haipai: &Vec<i32>, furo: &Vec<Vec<i32>>, allowed: &Vec<i32>) -> bool {
+fn check_allowed(haipai: &Vec<i8>, furo: &Vec<Vec<i8>>, allowed: &Vec<i8>) -> bool {
     for v in haipai {
         if !allowed.contains(v) {
             return false;
@@ -50,8 +50,8 @@ fn check_allowed(haipai: &Vec<i32>, furo: &Vec<Vec<i32>>, allowed: &Vec<i32>) ->
     true
 }
 
-fn to_hand(pattern: &Vec<Vec<i32>>) -> Vec<i32> {
-    let occurrences = pattern.iter().flatten().collect::<Vec<&i32>>();
+fn to_hand(pattern: &Vec<Vec<i8>>) -> Vec<i8> {
+    let occurrences = pattern.iter().flatten().collect::<Vec<&i8>>();
     let mut hand = vec![
         0, 0, 0, 0, 0, 0, 0, 0, 0, //
         0, 0, 0, 0, 0, 0, 0, 0, 0, //
@@ -65,8 +65,8 @@ fn to_hand(pattern: &Vec<Vec<i32>>) -> Vec<i32> {
 }
 
 // Get same suit index or -1 if there are more than one suit in hand or hand consists of HONORS
-fn get_same_suit(current_pattern: &Vec<Vec<i32>>, exclude_honors: bool) -> i32 {
-    let mut found_suit: i32 = -1;
+fn get_same_suit(current_pattern: &Vec<Vec<i8>>, exclude_honors: bool) -> i8 {
+    let mut found_suit: i8 = -1;
     let slices = slice_by_suit(&to_hand(current_pattern));
     for i in 0..4 {
         if sum(&slices[i]) == 0 {
@@ -79,14 +79,14 @@ fn get_same_suit(current_pattern: &Vec<Vec<i32>>, exclude_honors: bool) -> i32 {
             // more than one suit in hand
             return -1;
         }
-        found_suit = i as i32;
+        found_suit = i as i8;
     }
 
     if found_suit == 3 { -1 } else { found_suit }
 }
 
 // Simple 64-bit digest for positive numbers not more than 7-bit length (<63)
-fn digest_simple(input: &Vec<i32>) -> i64 {
+fn digest_simple(input: &Vec<i8>) -> i64 {
     let mut output: i64 = 0;
     for i in 0..input.len() {
         output += (input[i] as i64) << 7 * i;
@@ -94,7 +94,7 @@ fn digest_simple(input: &Vec<i32>) -> i64 {
     output
 }
 
-fn check_chanta_like(current_pattern: &Vec<Vec<i32>>, allow: &Vec<i32>) -> bool {
+fn check_chanta_like(current_pattern: &Vec<Vec<i8>>, allow: &Vec<i8>) -> bool {
     let mut has_jyuntsu = false;
     for v in current_pattern {
         if v.len() <= 2 || v[0] == v[1] {
@@ -118,7 +118,7 @@ fn check_chanta_like(current_pattern: &Vec<Vec<i32>>, allow: &Vec<i32>) -> bool 
     has_jyuntsu
 }
 
-fn check_yakuhai(current_pattern: &Vec<Vec<i32>>, jikaze: i32, bakaze: i32, which: i32) -> bool {
+fn check_yakuhai(current_pattern: &Vec<Vec<i8>>, jikaze: i8, bakaze: i8, which: i8) -> bool {
     for v in current_pattern {
         if v[0].abs() == which && [jikaze, bakaze, 32, 33, 34].contains(&v[0].abs()) && v.len() >= 3
         {
@@ -243,7 +243,7 @@ fn yaku_check_shosuushi(i: &YakuCheckInput) -> bool {
 }
 
 fn yaku_check_daisangen(i: &YakuCheckInput) -> bool {
-    let need = [Tiles::WD as i32, Tiles::GD as i32, Tiles::RD as i32];
+    let need = [Tiles::WD as i8, Tiles::GD as i8, Tiles::RD as i8];
     let mut res = 0;
     for v in i.current_pattern {
         if need.contains(&v[0].abs()) && v.len() >= 3 {
@@ -276,11 +276,11 @@ fn yaku_check_suukantsu(i: &YakuCheckInput) -> bool {
 }
 
 fn yaku_check_tenhou(i: &YakuCheckInput) -> bool {
-    i.first_take && i.is_tsumo && i.jikaze == Tiles::E as i32 && i.furo.len() == 0
+    i.first_take && i.is_tsumo && i.jikaze == Tiles::E as i8 && i.furo.len() == 0
 }
 
 fn yaku_check_chihou(i: &YakuCheckInput) -> bool {
-    i.first_take && i.is_tsumo && i.jikaze != Tiles::E as i32 && i.furo.len() == 0
+    i.first_take && i.is_tsumo && i.jikaze != Tiles::E as i8 && i.furo.len() == 0
 }
 
 fn yaku_check_renhou(i: &YakuCheckInput) -> bool {
@@ -360,7 +360,7 @@ fn yaku_check_sankantsu(i: &YakuCheckInput) -> bool {
 }
 
 fn yaku_check_shosangen(i: &YakuCheckInput) -> bool {
-    let need = vec![Tiles::WD as i32, Tiles::GD as i32, Tiles::RD as i32];
+    let need = vec![Tiles::WD as i8, Tiles::GD as i8, Tiles::RD as i8];
     let mut kotsu_or_toitsu = 0;
     for v in i.current_pattern {
         if need.contains(&v[0].abs()) && v[0] == v[1] {
@@ -385,7 +385,7 @@ fn yaku_check_sanankou(i: &YakuCheckInput) -> bool {
     let mut kotsu = 0;
 
     // keep here all tiles that are not closed kantsu
-    let mut open_kotsu: Vec<i32> = Vec::new();
+    let mut open_kotsu: Vec<i8> = Vec::new();
     for v in i.furo {
         if v[0] > 0 && v[0] == v[1] {
             open_kotsu.push(v[0]);
@@ -401,7 +401,7 @@ fn yaku_check_sanankou(i: &YakuCheckInput) -> bool {
                 .find(|meld| digest_simple(set) == digest_simple(meld))
                 == None
         })
-        .collect::<Vec<&Vec<i32>>>();
+        .collect::<Vec<&Vec<i8>>>();
 
     for v in i.current_pattern {
         if open_kotsu.contains(&v[0])
@@ -435,13 +435,13 @@ fn yaku_check_daburu_riichi(i: &YakuCheckInput) -> bool {
         && i.furo
             .iter()
             .filter(|m| m[0] > 0)
-            .collect::<Vec<&Vec<i32>>>()
+            .collect::<Vec<&Vec<i8>>>()
             .len()
             == 0
 }
 
 fn yaku_check_ittsu(i: &YakuCheckInput) -> bool {
-    let mut res: Vec<Vec<i32>> = vec![
+    let mut res: Vec<Vec<i8>> = vec![
         vec![0, 0, 0], // man shuntsu
         vec![0, 0, 0], // pin shuntsu
         vec![0, 0, 0], // sou shuntsu
@@ -461,7 +461,7 @@ fn yaku_check_ittsu(i: &YakuCheckInput) -> bool {
 }
 
 fn yaku_check_sanshoku(i: &YakuCheckInput) -> bool {
-    let mut res: Vec<Vec<i32>> = vec![
+    let mut res: Vec<Vec<i8>> = vec![
         vec![0, 0, 0, 0, 0, 0, 0, 0, 0],
         vec![0, 0, 0, 0, 0, 0, 0, 0, 0],
         vec![0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -510,9 +510,9 @@ fn yaku_check_pinfu(i: &YakuCheckInput) -> bool {
             if [
                 i.bakaze,
                 i.jikaze,
-                Tiles::WD as i32,
-                Tiles::RD as i32,
-                Tiles::GD as i32,
+                Tiles::WD as i8,
+                Tiles::RD as i8,
+                Tiles::GD as i8,
             ]
             .contains(&v[0])
             {
@@ -622,55 +622,55 @@ fn yaku_check_houtei(i: &YakuCheckInput) -> bool {
 }
 
 fn yaku_check_round_wind_east(i: &YakuCheckInput) -> bool {
-    i.bakaze == Tiles::E as i32
-        && check_yakuhai(i.current_pattern, i.jikaze, i.bakaze, Tiles::E as i32)
+    i.bakaze == Tiles::E as i8
+        && check_yakuhai(i.current_pattern, i.jikaze, i.bakaze, Tiles::E as i8)
 }
 
 fn yaku_check_round_wind_south(i: &YakuCheckInput) -> bool {
-    i.bakaze == Tiles::S as i32
-        && check_yakuhai(i.current_pattern, i.jikaze, i.bakaze, Tiles::S as i32)
+    i.bakaze == Tiles::S as i8
+        && check_yakuhai(i.current_pattern, i.jikaze, i.bakaze, Tiles::S as i8)
 }
 
 fn yaku_check_round_wind_west(i: &YakuCheckInput) -> bool {
-    i.bakaze == Tiles::W as i32
-        && check_yakuhai(i.current_pattern, i.jikaze, i.bakaze, Tiles::W as i32)
+    i.bakaze == Tiles::W as i8
+        && check_yakuhai(i.current_pattern, i.jikaze, i.bakaze, Tiles::W as i8)
 }
 
 fn yaku_check_round_wind_north(i: &YakuCheckInput) -> bool {
-    i.bakaze == Tiles::N as i32
-        && check_yakuhai(i.current_pattern, i.jikaze, i.bakaze, Tiles::N as i32)
+    i.bakaze == Tiles::N as i8
+        && check_yakuhai(i.current_pattern, i.jikaze, i.bakaze, Tiles::N as i8)
 }
 
 fn yaku_check_own_wind_east(i: &YakuCheckInput) -> bool {
-    i.jikaze == Tiles::E as i32
-        && check_yakuhai(i.current_pattern, i.jikaze, i.bakaze, Tiles::E as i32)
+    i.jikaze == Tiles::E as i8
+        && check_yakuhai(i.current_pattern, i.jikaze, i.bakaze, Tiles::E as i8)
 }
 
 fn yaku_check_own_wind_south(i: &YakuCheckInput) -> bool {
-    i.jikaze == Tiles::S as i32
-        && check_yakuhai(i.current_pattern, i.jikaze, i.bakaze, Tiles::S as i32)
+    i.jikaze == Tiles::S as i8
+        && check_yakuhai(i.current_pattern, i.jikaze, i.bakaze, Tiles::S as i8)
 }
 
 fn yaku_check_own_wind_west(i: &YakuCheckInput) -> bool {
-    i.jikaze == Tiles::W as i32
-        && check_yakuhai(i.current_pattern, i.jikaze, i.bakaze, Tiles::W as i32)
+    i.jikaze == Tiles::W as i8
+        && check_yakuhai(i.current_pattern, i.jikaze, i.bakaze, Tiles::W as i8)
 }
 
 fn yaku_check_own_wind_north(i: &YakuCheckInput) -> bool {
-    i.jikaze == Tiles::N as i32
-        && check_yakuhai(i.current_pattern, i.jikaze, i.bakaze, Tiles::N as i32)
+    i.jikaze == Tiles::N as i8
+        && check_yakuhai(i.current_pattern, i.jikaze, i.bakaze, Tiles::N as i8)
 }
 
 fn yaku_check_haku(i: &YakuCheckInput) -> bool {
-    check_yakuhai(i.current_pattern, i.jikaze, i.bakaze, Tiles::WD as i32)
+    check_yakuhai(i.current_pattern, i.jikaze, i.bakaze, Tiles::WD as i8)
 }
 
 fn yaku_check_hatsu(i: &YakuCheckInput) -> bool {
-    check_yakuhai(i.current_pattern, i.jikaze, i.bakaze, Tiles::GD as i32)
+    check_yakuhai(i.current_pattern, i.jikaze, i.bakaze, Tiles::GD as i8)
 }
 
 fn yaku_check_chun(i: &YakuCheckInput) -> bool {
-    check_yakuhai(i.current_pattern, i.jikaze, i.bakaze, Tiles::RD as i32)
+    check_yakuhai(i.current_pattern, i.jikaze, i.bakaze, Tiles::RD as i8)
 }
 
 // Yaku settings aggregate

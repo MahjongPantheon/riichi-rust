@@ -2,7 +2,7 @@ use crate::constants::{kokushi_idx, sum};
 use crate::interfaces::HairiResult;
 use std::cmp::min;
 
-pub fn shanten13(haipai: &Vec<i32>) -> i32 {
+pub fn shanten13(haipai: &Vec<i8>) -> i8 {
     let cnt = sum(&haipai);
     if cnt < 13 || cnt > 14 {
         return -1; // wrong count
@@ -23,7 +23,7 @@ pub fn shanten13(haipai: &Vec<i32>) -> i32 {
     13 - singles - at_least_one_pair
 }
 
-pub fn shanten7(haipai: &Vec<i32>) -> i32 {
+pub fn shanten7(haipai: &Vec<i8>) -> i8 {
     let cnt = sum(&haipai);
     if cnt < 13 || cnt > 14 {
         return -1; // wrong count
@@ -49,14 +49,14 @@ pub fn shanten7(haipai: &Vec<i32>) -> i32 {
 }
 
 fn search_helper(
-    hand_part: &mut Vec<i32>,
-    index: i32,
+    hand_part: &mut Vec<i8>,
+    index: i8,
     is_jihai: bool,
-    mentsu: i32,
-    tatsu: i32,
-    singles: i32,
-) -> (i32, i32, i32) {
-    let mut tmp: (i32, i32, i32);
+    mentsu: i8,
+    tatsu: i8,
+    singles: i8,
+) -> (i8, i8, i8) {
+    let mut tmp: (i8, i8, i8);
     let mut max = (mentsu, tatsu, singles);
 
     if index == (if is_jihai { 7 } else { 9 }) {
@@ -99,9 +99,9 @@ fn search_helper(
 
     if !is_jihai {
         if hand_part[index as usize] > 0
-            && index + 1 < hand_part.len() as i32
+            && index + 1 < hand_part.len() as i8
             && hand_part[(index + 1) as usize] > 0
-            && index + 2 < hand_part.len() as i32
+            && index + 2 < hand_part.len() as i8
             && hand_part[(index + 2) as usize] > 0
         {
             hand_part[index as usize] -= 1;
@@ -117,7 +117,7 @@ fn search_helper(
         }
 
         if hand_part[index as usize] > 0
-            && index + 2 < hand_part.len() as i32
+            && index + 2 < hand_part.len() as i8
             && hand_part[(index + 2) as usize] > 0
         {
             hand_part[index as usize] -= 1;
@@ -131,7 +131,7 @@ fn search_helper(
         }
 
         if hand_part[index as usize] > 0
-            && index + 1 < hand_part.len() as i32
+            && index + 1 < hand_part.len() as i8
             && hand_part[(index + 1) as usize] > 0
         {
             hand_part[index as usize] -= 1;
@@ -148,31 +148,31 @@ fn search_helper(
     max
 }
 
-pub fn shanten(haipai: &Vec<i32>) -> i32 {
+pub fn shanten(haipai: &Vec<i8>) -> i8 {
     let mut res = 9;
     let mut mentsu = 0;
     let mut tatsu = 0;
     let mut singles = 0;
-    let mut furo: i32;
+    let mut furo: i8;
 
     fn search(
-        arr: &mut Vec<i32>,
+        arr: &mut Vec<i8>,
         is_jihai: bool,
-        mentsu: i32,
-        tatsu: i32,
-        singles: i32,
-    ) -> (i32, i32, i32) {
+        mentsu: i8,
+        tatsu: i8,
+        singles: i8,
+    ) -> (i8, i8, i8) {
         let result = search_helper(arr, 0, is_jihai, 0, 0, 0);
         (mentsu + result.0, tatsu + result.1, singles + result.2)
     }
 
     fn calc(
-        mentsu_in: i32,
-        tatsu_in: i32,
-        singles_in: i32,
-        furo_in: i32,
-        res_in: i32,
-    ) -> (i32, i32, i32, i32, i32) {
+        mentsu_in: i8,
+        tatsu_in: i8,
+        singles_in: i8,
+        furo_in: i8,
+        res_in: i8,
+    ) -> (i8, i8, i8, i8, i8) {
         let mut tmp_res = -1;
         let mut mentsu = mentsu_in;
         let mut tatsu = tatsu_in;
@@ -221,9 +221,9 @@ pub fn shanten(haipai: &Vec<i32>) -> i32 {
         return -1; // wrong count;
     }
 
-    furo = ((14 - s) as f32 / 3.).round() as i32;
+    furo = ((14 - s) as f32 / 3.).round() as i8;
     let mut tmp = haipai.clone();
-    let haipai_c: &mut Vec<i32> = tmp.as_mut();
+    let haipai_c: &mut Vec<i8> = tmp.as_mut();
 
     // Add one non-existing phantom tile to make hand to be 14-tile
     if s % 3 == 1 {
@@ -265,8 +265,8 @@ pub fn shanten(haipai: &Vec<i32>) -> i32 {
     res
 }
 
-pub fn hairi(haipai: &mut Vec<i32>, is_7_or_13: bool) -> Option<HairiResult> {
-    let shanten_calc = |haipai: &mut Vec<i32>| {
+pub fn hairi(haipai: &mut Vec<i8>, is_7_or_13: bool) -> Option<HairiResult> {
+    let shanten_calc = |haipai: &mut Vec<i8>| {
         if !is_7_or_13 {
             shanten(haipai)
         } else {
@@ -288,8 +288,8 @@ pub fn hairi(haipai: &mut Vec<i32>, is_7_or_13: bool) -> Option<HairiResult> {
         return None;
     }
 
-    let calc_hairi = |haipai: &mut Vec<i32>, current_index: i32| -> Vec<i32> {
-        let mut waits: Vec<i32> = Vec::new();
+    let calc_hairi = |haipai: &mut Vec<i8>, current_index: i8| -> Vec<i8> {
+        let mut waits: Vec<i8> = Vec::new();
         for i in 0..34 {
             if i == current_index {
                 continue;
@@ -326,14 +326,14 @@ pub fn hairi(haipai: &mut Vec<i32>, is_7_or_13: bool) -> Option<HairiResult> {
     }
 
     // 14-tile non-tempai hand: try to detect possible discards and waits after it
-    let mut waits_after_discard: Vec<(i32, Vec<i32>)> = Vec::new();
+    let mut waits_after_discard: Vec<(i8, Vec<i8>)> = Vec::new();
     for i in 0..34 {
         if haipai[i] == 0 {
             continue;
         }
         haipai[i] -= 1;
         if shanten_calc(haipai) == sht {
-            waits_after_discard.push((i as i32, calc_hairi(haipai, i as i32)));
+            waits_after_discard.push((i as i8, calc_hairi(haipai, i as i8)));
         }
         haipai[i] += 1;
     }

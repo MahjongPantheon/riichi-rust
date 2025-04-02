@@ -1,6 +1,6 @@
 use crate::constants::{Suit, Val, digest, kokushi_idx, slice_by_suit, sum};
 
-pub fn check7(haipai: &Vec<i32>) -> bool {
+pub fn check7(haipai: &Vec<i8>) -> bool {
     let mut s = 0;
     for i in 0..haipai.len() {
         if haipai[i] > 0 && haipai[i] != 2 {
@@ -11,14 +11,14 @@ pub fn check7(haipai: &Vec<i32>) -> bool {
     s == 14
 }
 
-pub fn check13(haipai: &Vec<i32>) -> bool {
+pub fn check13(haipai: &Vec<i8>) -> bool {
     let arr = kokushi_idx().map(|i| haipai[i as usize - 1]).to_vec();
     !arr.contains(&0) && sum(&arr) == 14
 }
 
-fn check_internal(haipai: &Vec<i32>, is_jihai: bool) -> bool {
+fn check_internal(haipai: &Vec<i8>, is_jihai: bool) -> bool {
     let mut tmp = haipai.clone();
-    let haipai_c: &mut Vec<i32> = tmp.as_mut();
+    let haipai_c: &mut Vec<i8> = tmp.as_mut();
     let s = sum(haipai_c);
     if s == 0 {
         return true;
@@ -71,7 +71,7 @@ fn check_internal(haipai: &Vec<i32>, is_jihai: bool) -> bool {
     true
 }
 
-pub fn check(haipai: &Vec<i32>) -> bool {
+pub fn check(haipai: &Vec<i8>) -> bool {
     let mut j = 0;
 
     for i in 0..3 {
@@ -102,20 +102,20 @@ pub fn check(haipai: &Vec<i32>) -> bool {
         && check_internal(&slices[3], true)
 }
 
-pub fn check_all(haipai: &Vec<i32>) -> bool {
+pub fn check_all(haipai: &Vec<i8>) -> bool {
     check7(haipai) || check13(haipai) || check(haipai)
 }
 
 // Finds indices in hand where kotsu is detected
 // Doesn't find kantsu.
 // Mutates original array!
-pub fn find_kotsu(haipai: &mut Vec<i32>) -> Vec<Vec<i32>> {
-    let mut res: Vec<Vec<i32>> = Vec::new();
+pub fn find_kotsu(haipai: &mut Vec<i8>) -> Vec<Vec<i8>> {
+    let mut res: Vec<Vec<i8>> = Vec::new();
     for i in 0..haipai.len() {
         if haipai[i] >= 3 {
             haipai[i] -= 3;
             if check(haipai) {
-                res.push(vec![i as i32 + 1, i as i32 + 1, i as i32 + 1]);
+                res.push(vec![i as i8 + 1, i as i8 + 1, i as i8 + 1]);
             } else {
                 haipai[i] += 3;
             }
@@ -127,8 +127,8 @@ pub fn find_kotsu(haipai: &mut Vec<i32>) -> Vec<Vec<i32>> {
 
 // Finds arrays of indices in hand where shuntsu is detected
 // Mutates original array!
-pub fn find_shuntsu(haipai: &mut Vec<i32>) -> Vec<Vec<i32>> {
-    let mut res: Vec<Vec<i32>> = Vec::new();
+pub fn find_shuntsu(haipai: &mut Vec<i8>) -> Vec<Vec<i8>> {
+    let mut res: Vec<Vec<i8>> = Vec::new();
 
     // Don't consider honors (last 7).
     for i in 0..haipai.len() - 7 {
@@ -149,7 +149,7 @@ pub fn find_shuntsu(haipai: &mut Vec<i32>) -> Vec<Vec<i32>> {
             haipai[i + 2] -= 1;
 
             if check(haipai) {
-                res.push(vec![i as i32 + 1, (i + 1) as i32 + 1, (i + 2) as i32 + 1]);
+                res.push(vec![i as i8 + 1, (i + 1) as i8 + 1, (i + 2) as i8 + 1]);
             } else {
                 haipai[i] += 1;
                 haipai[i + 1] += 1;
@@ -164,10 +164,10 @@ pub fn find_shuntsu(haipai: &mut Vec<i32>) -> Vec<Vec<i32>> {
 
 // Finds index of first set of repeated tiles or -1 otherwise
 // Skip excluded index - it's used below as fake pair
-pub fn find_janto(haipai: &Vec<i32>, exclude: i32) -> i32 {
+pub fn find_janto(haipai: &Vec<i8>, exclude: i8) -> i8 {
     for i in 0..haipai.len() {
-        if haipai[i] >= 2 && i as i32 != exclude {
-            return i as i32;
+        if haipai[i] >= 2 && i as i8 != exclude {
+            return i as i8;
         }
     }
     -1
@@ -175,8 +175,8 @@ pub fn find_janto(haipai: &Vec<i32>, exclude: i32) -> i32 {
 
 // Find hand split variant
 // Skip excluded index - it's used below as fake pair
-pub fn calc(haipai: &Vec<i32>, exclude: i32, real_pair: i32) -> Vec<Vec<Vec<i32>>> {
-    let mut res: Vec<Vec<Vec<i32>>> = Vec::new();
+pub fn calc(haipai: &Vec<i8>, exclude: i8, real_pair: i8) -> Vec<Vec<Vec<i8>>> {
+    let mut res: Vec<Vec<Vec<i8>>> = Vec::new();
 
     // First pass: find kotsu, then shuntsu
     let mut clone = haipai.clone();
@@ -229,8 +229,8 @@ pub fn calc(haipai: &Vec<i32>, exclude: i32, real_pair: i32) -> Vec<Vec<Vec<i32>
     res
 }
 
-pub fn find_all_agari_patterns(haipai: &Vec<i32>) -> Vec<Vec<Vec<i32>>> {
-    let mut res: Vec<Vec<Vec<i32>>> = Vec::new();
+pub fn find_all_agari_patterns(haipai: &Vec<i8>) -> Vec<Vec<Vec<i8>>> {
+    let mut res: Vec<Vec<Vec<i8>>> = Vec::new();
 
     let mut clone = haipai.clone();
 
@@ -253,12 +253,12 @@ pub fn find_all_agari_patterns(haipai: &Vec<i32>) -> Vec<Vec<Vec<i32>>> {
 
     // Check kokushi separately
     if can_be_kokushi {
-        let mut vals: Vec<i32> = Vec::new();
+        let mut vals: Vec<i8> = Vec::new();
         for i in 0..clone.len() {
             if clone[i] > 0 {
-                vals.push(i as i32 + 1);
+                vals.push(i as i8 + 1);
                 if clone[i] > 1 {
-                    vals.push(i as i32 + 1);
+                    vals.push(i as i8 + 1);
                 }
             }
         }
@@ -268,7 +268,7 @@ pub fn find_all_agari_patterns(haipai: &Vec<i32>) -> Vec<Vec<Vec<i32>>> {
     // Some questionable code below :)
 
     let mut fake_pair_index = -1;
-    for i in Suit::Honor as i32 * 9..34 {
+    for i in Suit::Honor as i8 * 9..34 {
         if clone[i as usize] == 0 {
             // found first honor tile that is absent in hand
             clone[i as usize] += 2; // add two fake tiles there so calc() would think the hand is valid when another pair is excluded.
@@ -282,7 +282,7 @@ pub fn find_all_agari_patterns(haipai: &Vec<i32>) -> Vec<Vec<Vec<i32>>> {
     // Fake pair added above is required to keep proper tiles count in hand.
 
     for i in 0..clone.len() {
-        if i as i32 == fake_pair_index {
+        if i as i8 == fake_pair_index {
             // Don't process fake pair
             continue;
         }
@@ -290,7 +290,7 @@ pub fn find_all_agari_patterns(haipai: &Vec<i32>) -> Vec<Vec<Vec<i32>>> {
         if clone[i] >= 2 {
             clone[i] -= 2;
             if check(&clone) {
-                let calc_res = calc(&clone, fake_pair_index, i as i32);
+                let calc_res = calc(&clone, fake_pair_index, i as i8);
                 res.extend_from_slice(&calc_res);
             }
             clone[i] += 2;
@@ -302,17 +302,17 @@ pub fn find_all_agari_patterns(haipai: &Vec<i32>) -> Vec<Vec<Vec<i32>>> {
     }
 
     if can_be_chiitoitsu {
-        let mut vals: Vec<Vec<i32>> = Vec::new();
+        let mut vals: Vec<Vec<i8>> = Vec::new();
         for i in 0..clone.len() {
             if clone[i] == 2 {
-                vals.push(vec![i as i32 + 1, i as i32 + 1]);
+                vals.push(vec![i as i8 + 1, i as i8 + 1]);
             }
         }
         res.push(vals);
     }
 
     // Finally we try to find and eliminate duplicate decompositions.
-    let mut final_res: Vec<Vec<Vec<i32>>> = Vec::new();
+    let mut final_res: Vec<Vec<Vec<i8>>> = Vec::new();
 
     for i in 0..res.len() {
         let mut is_duplicate = false;
@@ -334,7 +334,7 @@ pub fn find_all_agari_patterns(haipai: &Vec<i32>) -> Vec<Vec<Vec<i32>>> {
 mod tests {
     use super::*;
 
-    fn digest_all(decompositions: Vec<Vec<Vec<i32>>>) -> String {
+    fn digest_all(decompositions: Vec<Vec<Vec<i8>>>) -> String {
         decompositions
             .iter()
             .map(|set| digest(&set.clone()))

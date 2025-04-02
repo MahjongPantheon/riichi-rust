@@ -23,10 +23,10 @@ pub enum Val {
     N9 = 9,
 }
 
-impl Mul<i32> for Suit {
+impl Mul<i8> for Suit {
     type Output = usize;
 
-    fn mul(self, rhs: i32) -> Self::Output {
+    fn mul(self, rhs: i8) -> Self::Output {
         self as usize * rhs as usize
     }
 }
@@ -141,25 +141,25 @@ pub enum Yaku {
     Akadora = 55,
 }
 
-pub fn kokushi_idx() -> [i32; 13] {
+pub fn kokushi_idx() -> [i8; 13] {
     [
-        Tiles::M1 as i32,
-        Tiles::M9 as i32,
-        Tiles::P1 as i32,
-        Tiles::P9 as i32,
-        Tiles::S1 as i32,
-        Tiles::S9 as i32,
-        Tiles::E as i32,
-        Tiles::S as i32,
-        Tiles::W as i32,
-        Tiles::N as i32,
-        Tiles::WD as i32,
-        Tiles::GD as i32,
-        Tiles::RD as i32,
+        Tiles::M1 as i8,
+        Tiles::M9 as i8,
+        Tiles::P1 as i8,
+        Tiles::P9 as i8,
+        Tiles::S1 as i8,
+        Tiles::S9 as i8,
+        Tiles::E as i8,
+        Tiles::S as i8,
+        Tiles::W as i8,
+        Tiles::N as i8,
+        Tiles::WD as i8,
+        Tiles::GD as i8,
+        Tiles::RD as i8,
     ]
 }
 
-pub fn sum(haipai: &Vec<i32>) -> i32 {
+pub fn sum(haipai: &Vec<i8>) -> i8 {
     haipai.iter().fold(0, |acc, v| acc + v)
 }
 
@@ -171,7 +171,7 @@ pub fn ceil10(val: i32) -> i32 {
     10 * (val as f32 / 10.0).ceil() as i32
 }
 
-pub fn slice_by_suit(haipai: &Vec<i32>) -> Vec<Vec<i32>> {
+pub fn slice_by_suit(haipai: &Vec<i8>) -> Vec<Vec<i8>> {
     vec![
         haipai[Suit::Man * 9..Suit::Man * 9 + 9].to_vec(),
         haipai[Suit::Pin * 9..Suit::Pin * 9 + 9].to_vec(),
@@ -180,15 +180,15 @@ pub fn slice_by_suit(haipai: &Vec<i32>) -> Vec<Vec<i32>> {
     ]
 }
 
-pub fn is19(tile: i32) -> bool {
+pub fn is19(tile: i8) -> bool {
     kokushi_idx().contains(&tile)
 }
 
-pub fn is_proper_open_set(arr: &Vec<i32>) -> bool {
+pub fn is_proper_open_set(arr: &Vec<i8>) -> bool {
     if arr.len() > 4 || arr.len() < 2 {
         false
     } else {
-        let set: HashSet<&i32> = HashSet::from_iter(arr.as_slice());
+        let set: HashSet<&i8> = HashSet::from_iter(arr.as_slice());
         if set.len() == 1 {
             true
         } else {
@@ -207,7 +207,7 @@ pub fn is_proper_open_set(arr: &Vec<i32>) -> bool {
     }
 }
 
-pub fn digest(decomposition: &Vec<Vec<i32>>) -> String {
+pub fn digest(decomposition: &Vec<Vec<i8>>) -> String {
     let mut arr = decomposition
         .iter()
         .map(|set| {
@@ -224,83 +224,83 @@ pub fn digest(decomposition: &Vec<Vec<i32>>) -> String {
     arr.join("#")
 }
 
-pub static GREENS: [i32; 6] = [
-    Tiles::S2 as i32,
-    Tiles::S3 as i32,
-    Tiles::S4 as i32,
-    Tiles::S6 as i32,
-    Tiles::S8 as i32,
-    Tiles::GD as i32,
+pub static GREENS: [i8; 6] = [
+    Tiles::S2 as i8,
+    Tiles::S3 as i8,
+    Tiles::S4 as i8,
+    Tiles::S6 as i8,
+    Tiles::S8 as i8,
+    Tiles::GD as i8,
 ];
-pub static WINDS: [i32; 4] = [
-    Tiles::E as i32,
-    Tiles::S as i32,
-    Tiles::W as i32,
-    Tiles::N as i32,
+pub static WINDS: [i8; 4] = [
+    Tiles::E as i8,
+    Tiles::S as i8,
+    Tiles::W as i8,
+    Tiles::N as i8,
 ];
-pub static HONORS: [i32; 7] = [
-    Tiles::E as i32,
-    Tiles::S as i32,
-    Tiles::W as i32,
-    Tiles::N as i32,
-    Tiles::GD as i32,
-    Tiles::RD as i32,
-    Tiles::WD as i32,
+pub static HONORS: [i8; 7] = [
+    Tiles::E as i8,
+    Tiles::S as i8,
+    Tiles::W as i8,
+    Tiles::N as i8,
+    Tiles::GD as i8,
+    Tiles::RD as i8,
+    Tiles::WD as i8,
 ];
-pub static TERMINALS: [i32; 6] = [
-    Tiles::M1 as i32,
-    Tiles::M9 as i32,
-    Tiles::S1 as i32,
-    Tiles::S9 as i32,
-    Tiles::P1 as i32,
-    Tiles::P9 as i32,
+pub static TERMINALS: [i8; 6] = [
+    Tiles::M1 as i8,
+    Tiles::M9 as i8,
+    Tiles::S1 as i8,
+    Tiles::S9 as i8,
+    Tiles::P1 as i8,
+    Tiles::P9 as i8,
 ];
-pub static TERMINALS_AND_HONORS: [i32; 13] = [
-    Tiles::M1 as i32,
-    Tiles::M9 as i32,
-    Tiles::S1 as i32,
-    Tiles::S9 as i32,
-    Tiles::P1 as i32,
-    Tiles::P9 as i32,
-    Tiles::E as i32,
-    Tiles::S as i32,
-    Tiles::W as i32,
-    Tiles::N as i32,
-    Tiles::GD as i32,
-    Tiles::RD as i32,
-    Tiles::WD as i32,
+pub static TERMINALS_AND_HONORS: [i8; 13] = [
+    Tiles::M1 as i8,
+    Tiles::M9 as i8,
+    Tiles::S1 as i8,
+    Tiles::S9 as i8,
+    Tiles::P1 as i8,
+    Tiles::P9 as i8,
+    Tiles::E as i8,
+    Tiles::S as i8,
+    Tiles::W as i8,
+    Tiles::N as i8,
+    Tiles::GD as i8,
+    Tiles::RD as i8,
+    Tiles::WD as i8,
 ];
-pub static CHI_START: [i32; 9] = [
-    Tiles::M1 as i32,
-    Tiles::M4 as i32,
-    Tiles::M7 as i32,
-    Tiles::P1 as i32,
-    Tiles::P4 as i32,
-    Tiles::P7 as i32,
-    Tiles::S1 as i32,
-    Tiles::S4 as i32,
-    Tiles::S7 as i32,
+pub static CHI_START: [i8; 9] = [
+    Tiles::M1 as i8,
+    Tiles::M4 as i8,
+    Tiles::M7 as i8,
+    Tiles::P1 as i8,
+    Tiles::P4 as i8,
+    Tiles::P7 as i8,
+    Tiles::S1 as i8,
+    Tiles::S4 as i8,
+    Tiles::S7 as i8,
 ];
-pub static SIMPLE_TILES: [i32; 21] = [
-    Tiles::M2 as i32,
-    Tiles::M3 as i32,
-    Tiles::M4 as i32,
-    Tiles::M5 as i32,
-    Tiles::M6 as i32,
-    Tiles::M7 as i32,
-    Tiles::M8 as i32,
-    Tiles::P2 as i32,
-    Tiles::P3 as i32,
-    Tiles::P4 as i32,
-    Tiles::P5 as i32,
-    Tiles::P6 as i32,
-    Tiles::P7 as i32,
-    Tiles::P8 as i32,
-    Tiles::S2 as i32,
-    Tiles::S3 as i32,
-    Tiles::S4 as i32,
-    Tiles::S5 as i32,
-    Tiles::S6 as i32,
-    Tiles::S7 as i32,
-    Tiles::S8 as i32,
+pub static SIMPLE_TILES: [i8; 21] = [
+    Tiles::M2 as i8,
+    Tiles::M3 as i8,
+    Tiles::M4 as i8,
+    Tiles::M5 as i8,
+    Tiles::M6 as i8,
+    Tiles::M7 as i8,
+    Tiles::M8 as i8,
+    Tiles::P2 as i8,
+    Tiles::P3 as i8,
+    Tiles::P4 as i8,
+    Tiles::P5 as i8,
+    Tiles::P6 as i8,
+    Tiles::P7 as i8,
+    Tiles::P8 as i8,
+    Tiles::S2 as i8,
+    Tiles::S3 as i8,
+    Tiles::S4 as i8,
+    Tiles::S5 as i8,
+    Tiles::S6 as i8,
+    Tiles::S7 as i8,
+    Tiles::S8 as i8,
 ];

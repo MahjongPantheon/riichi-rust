@@ -13,9 +13,9 @@ pub fn calc_riichi(
     let mut haipai = hand.closed_part.clone();
     // Open tiles
     // Closed kan will be with minus sign in tile values
-    let mut furo: Vec<Vec<i32>> = Vec::new();
+    let mut furo: Vec<Vec<i8>> = Vec::new();
     // tile34-formatted haipai
-    let mut haipai34: Vec<i32> = vec![
+    let mut haipai34: Vec<i8> = vec![
         0, 0, 0, 0, 0, 0, 0, 0, 0, //
         0, 0, 0, 0, 0, 0, 0, 0, 0, //
         0, 0, 0, 0, 0, 0, 0, 0, 0, //
@@ -37,7 +37,7 @@ pub fn calc_riichi(
             let mut tiles = meld_tiles
                 .iter()
                 .map(|tile| if open { *tile } else { -1 * tile })
-                .collect::<Vec<i32>>();
+                .collect::<Vec<i8>>();
             tiles.sort();
             furo.push(tiles);
         } else {
@@ -68,7 +68,7 @@ pub fn calc_riichi(
     )
 }
 
-fn is_menzen(furo: &Vec<Vec<i32>>) -> bool {
+fn is_menzen(furo: &Vec<Vec<i8>>) -> bool {
     for meld in furo {
         if meld.len() > 2 {
             // closed kan - negative values
@@ -81,7 +81,7 @@ fn is_menzen(furo: &Vec<Vec<i32>>) -> bool {
     true
 }
 
-fn calc_dora(haipai: &Vec<i32>, furo: &Vec<Vec<i32>>, dora: &Vec<i32>) -> i32 {
+fn calc_dora(haipai: &Vec<i8>, furo: &Vec<Vec<i8>>, dora: &Vec<i8>) -> i8 {
     let mut dora_count = 0;
 
     for hai in haipai {
@@ -109,13 +109,13 @@ fn calc_dora(haipai: &Vec<i32>, furo: &Vec<Vec<i32>>, dora: &Vec<i32>) -> i32 {
 
 // Return: (han, dora, akadora)
 fn calc_all_dora(
-    haipai: &Vec<i32>,
-    furo: &Vec<Vec<i32>>,
-    dora: &Vec<i32>,
+    haipai: &Vec<i8>,
+    furo: &Vec<Vec<i8>>,
+    dora: &Vec<i8>,
     current_han: i32,
-    current_aka: i32,
+    current_aka: i8,
     aka_enabled: bool,
-) -> (i32, i32) {
+) -> (i8, i8) {
     if current_han == 0 {
         return (0, 0);
     }
@@ -127,9 +127,9 @@ fn calc_all_dora(
 
 // Return: (total, oya_points, ko_points)
 fn calc_ten(
-    jikaze: i32,
+    jikaze: i8,
     is_tsumo: bool,
-    yakuman_count: i32,
+    yakuman_count: i8,
     han_count: i32,
     fu_count: i32,
     kiriage: bool,
@@ -137,12 +137,12 @@ fn calc_ten(
     let mut base: i32;
 
     if yakuman_count > 0 {
-        base = 8000 * yakuman_count;
+        base = 8000 * yakuman_count as i32;
     } else {
         if han_count == 0 {
             return (0, 0, 0);
         }
-        base = fu_count * 2_i32.pow(han_count as u32 + 2);
+        base = fu_count as i32 * 2_i32.pow(han_count as u32 + 2);
         if base > 2000 {
             if han_count >= 13 {
                 base = 8000;
@@ -188,23 +188,23 @@ fn calc_ten(
 
 pub fn calc_fu(
     is_tsumo: bool,
-    bakaze: i32,
-    jikaze: i32,
-    found_yaku: Vec<i32>,
-    taken_tile: i32, // -1 if nothing taken
-    current_pattern: &Vec<Vec<i32>>,
-    furo: &Vec<Vec<i32>>,
+    bakaze: i8,
+    jikaze: i8,
+    found_yaku: Vec<i8>,
+    taken_tile: i8, // -1 if nothing taken
+    current_pattern: &Vec<Vec<i8>>,
+    furo: &Vec<Vec<i8>>,
 ) -> Option<i32> {
     let mut fu;
-    let have_pinfu = found_yaku.contains(&(Yaku::Pinfu as i32));
+    let have_pinfu = found_yaku.contains(&(Yaku::Pinfu as i8));
 
-    if found_yaku.contains(&(Yaku::Chiitoitsu as i32)) {
+    if found_yaku.contains(&(Yaku::Chiitoitsu as i8)) {
         fu = 25;
-    } else if found_yaku.contains(&(Yaku::Kokushimusou as i32))
-        || found_yaku.contains(&(Yaku::Kokushimusou13Sides as i32))
+    } else if found_yaku.contains(&(Yaku::Kokushimusou as i8))
+        || found_yaku.contains(&(Yaku::Kokushimusou13Sides as i8))
     {
         fu = 0;
-    } else if found_yaku.contains(&(Yaku::Pinfu as i32)) {
+    } else if found_yaku.contains(&(Yaku::Pinfu as i8)) {
         fu = if is_tsumo { 20 } else { 30 };
     } else {
         fu = 20;
@@ -311,16 +311,16 @@ pub fn calc_fu(
 }
 
 fn calc_yaku(
-    haipai: &Vec<i32>,
-    haipai34: &Vec<i32>,
-    furo: &Vec<Vec<i32>>,
-    current_pattern: &Vec<Vec<i32>>,
+    haipai: &Vec<i8>,
+    haipai34: &Vec<i8>,
+    furo: &Vec<Vec<i8>>,
+    current_pattern: &Vec<Vec<i8>>,
     settings: &RiichiOptions,
     is_tsumo: bool,
-) -> (Vec<(i32, i32)>, i32, i32) {
-    let mut yaku_list: Vec<(i32, i32)> = Vec::new();
+) -> (Vec<(i8, i8)>, i8, i32) {
+    let mut yaku_list: Vec<(i8, i8)> = Vec::new();
     let mut yakuman = 0;
-    let mut han = 0;
+    let mut han: i32 = 0;
 
     let check_input = YakuCheckInput {
         haipai,
@@ -342,12 +342,12 @@ fn calc_yaku(
 
     for y in 0..YAKU_SETTINGS.len() {
         let yaku = &YAKU_SETTINGS[y];
-        if settings.disabled_yaku.contains(&(y as i32)) {
+        if settings.disabled_yaku.contains(&(y as i8)) {
             continue;
         }
         if yaku.is_local
             && !settings.all_local_yaku_enabled
-            && !settings.local_yaku_enabled.contains(&(y as i32))
+            && !settings.local_yaku_enabled.contains(&(y as i8))
         {
             continue;
         }
@@ -367,14 +367,14 @@ fn calc_yaku(
                     1
                 };
                 yakuman += n;
-                yaku_list.push((y as i32, if n > 1 { 26 } else { 13 }));
+                yaku_list.push((y as i8, if n > 1 { 26 } else { 13 }));
             } else {
                 let mut n = yaku.han;
                 if yaku.is_furo_minus && !is_menzen(furo) {
                     n -= 1;
                 }
-                yaku_list.push((y as i32, n));
-                han += n;
+                yaku_list.push((y as i8, n));
+                han += n as i32;
             }
         }
     }
@@ -383,10 +383,10 @@ fn calc_yaku(
 }
 
 fn calc_all(
-    haipai: &Vec<i32>,
-    haipai34: &Vec<i32>,
-    furo: &Vec<Vec<i32>>,
-    dora: &Vec<i32>,
+    haipai: &Vec<i8>,
+    haipai34: &Vec<i8>,
+    furo: &Vec<Vec<i8>>,
+    dora: &Vec<i8>,
     opts: &RiichiOptions,
     is_tsumo: bool,
     calc_hairi: bool,
@@ -432,18 +432,18 @@ fn calc_all(
             let (dora_count, akadora_count) =
                 calc_all_dora(haipai, furo, dora, han, opts.aka_count, opts.allow_aka);
             if dora_count > 0 {
-                han += dora_count;
-                yaku_list.push((Yaku::Dora as i32, dora_count));
+                han += dora_count as i32;
+                yaku_list.push((Yaku::Dora as i8, dora_count));
             }
             if opts.allow_aka && akadora_count > 0 {
-                han += akadora_count;
-                yaku_list.push((Yaku::Akadora as i32, akadora_count));
+                han += akadora_count as i32;
+                yaku_list.push((Yaku::Akadora as i8, akadora_count));
             }
             fu = calc_fu(
                 is_tsumo,
                 opts.bakaze,
                 opts.jikaze,
-                yaku_list.iter().map(|(y, _c)| *y).collect::<Vec<i32>>(),
+                yaku_list.iter().map(|(y, _c)| *y).collect::<Vec<i8>>(),
                 opts.tile_discarded_by_someone,
                 &v,
                 furo,
@@ -487,20 +487,20 @@ mod tests {
         let res = calc_riichi(
             RiichiHand {
                 closed_part: vec![
-                    Tiles::M1 as i32,
-                    Tiles::M2 as i32,
-                    Tiles::M3 as i32,
-                    Tiles::P2 as i32,
-                    Tiles::P3 as i32,
-                    Tiles::P4 as i32,
-                    Tiles::S3 as i32,
-                    Tiles::S4 as i32,
-                    Tiles::S5 as i32,
-                    Tiles::E as i32,
+                    Tiles::M1 as i8,
+                    Tiles::M2 as i8,
+                    Tiles::M3 as i8,
+                    Tiles::P2 as i8,
+                    Tiles::P3 as i8,
+                    Tiles::P4 as i8,
+                    Tiles::S3 as i8,
+                    Tiles::S4 as i8,
+                    Tiles::S5 as i8,
+                    Tiles::E as i8,
                 ],
                 open_part: vec![(
                     true,
-                    vec![Tiles::WD as i32, Tiles::WD as i32, Tiles::WD as i32],
+                    vec![Tiles::WD as i8, Tiles::WD as i8, Tiles::WD as i8],
                 )],
             },
             &mut RiichiOptions {
@@ -511,9 +511,9 @@ mod tests {
                 ippatsu: false,
                 double_riichi: false,
                 after_kan: false,
-                tile_discarded_by_someone: Tiles::E as i32,
-                bakaze: Tiles::E as i32,
-                jikaze: Tiles::E as i32,
+                tile_discarded_by_someone: Tiles::E as i8,
+                bakaze: Tiles::E as i8,
+                jikaze: Tiles::E as i8,
                 allow_aka: false,
                 allow_kuitan: false,
                 with_kiriage: false,
@@ -532,7 +532,7 @@ mod tests {
         assert_eq!(r.han, 1);
         assert_eq!(r.is_agari, true);
         assert_eq!(r.ten, 1500);
-        assert_eq!(r.yaku, vec![(Yaku::Haku as i32, 1)]);
+        assert_eq!(r.yaku, vec![(Yaku::Haku as i8, 1)]);
         assert_eq!(r.yakuman, 0);
     }
 
@@ -541,20 +541,20 @@ mod tests {
         let res = calc_riichi(
             RiichiHand {
                 closed_part: vec![
-                    Tiles::M1 as i32,
-                    Tiles::M2 as i32,
-                    Tiles::M3 as i32,
-                    Tiles::P2 as i32,
-                    Tiles::P3 as i32,
-                    Tiles::P4 as i32,
-                    Tiles::S3 as i32,
-                    Tiles::S4 as i32,
-                    Tiles::S5 as i32,
-                    Tiles::M7 as i32,
-                    Tiles::M8 as i32,
-                    Tiles::P5 as i32,
-                    Tiles::P5 as i32,
-                    Tiles::M9 as i32,
+                    Tiles::M1 as i8,
+                    Tiles::M2 as i8,
+                    Tiles::M3 as i8,
+                    Tiles::P2 as i8,
+                    Tiles::P3 as i8,
+                    Tiles::P4 as i8,
+                    Tiles::S3 as i8,
+                    Tiles::S4 as i8,
+                    Tiles::S5 as i8,
+                    Tiles::M7 as i8,
+                    Tiles::M8 as i8,
+                    Tiles::P5 as i8,
+                    Tiles::P5 as i8,
+                    Tiles::M9 as i8,
                 ],
                 open_part: vec![],
             },
@@ -567,8 +567,8 @@ mod tests {
                 double_riichi: false,
                 after_kan: false,
                 tile_discarded_by_someone: -1,
-                bakaze: Tiles::E as i32,
-                jikaze: Tiles::E as i32,
+                bakaze: Tiles::E as i8,
+                jikaze: Tiles::E as i8,
                 allow_aka: false,
                 allow_kuitan: false,
                 with_kiriage: false,
@@ -590,7 +590,7 @@ mod tests {
         assert_eq!(r.outgoing_ten.unwrap(), (700, 400));
         assert_eq!(
             r.yaku,
-            vec![(Yaku::Pinfu as i32, 1), (Yaku::Menzentsumo as i32, 1)]
+            vec![(Yaku::Pinfu as i8, 1), (Yaku::Menzentsumo as i8, 1)]
         );
         assert_eq!(r.yakuman, 0);
     }
@@ -600,23 +600,23 @@ mod tests {
         let res = calc_riichi(
             RiichiHand {
                 closed_part: vec![
-                    Tiles::M3 as i32,
-                    Tiles::M3 as i32,
-                    Tiles::M4 as i32,
-                    Tiles::M4 as i32,
-                    Tiles::M4 as i32,
-                    Tiles::S5 as i32,
-                    Tiles::S5 as i32,
-                    Tiles::S5 as i32,
+                    Tiles::M3 as i8,
+                    Tiles::M3 as i8,
+                    Tiles::M4 as i8,
+                    Tiles::M4 as i8,
+                    Tiles::M4 as i8,
+                    Tiles::S5 as i8,
+                    Tiles::S5 as i8,
+                    Tiles::S5 as i8,
                 ],
                 open_part: vec![
                     (
                         true,
-                        vec![Tiles::WD as i32, Tiles::WD as i32, Tiles::WD as i32],
+                        vec![Tiles::WD as i8, Tiles::WD as i8, Tiles::WD as i8],
                     ),
                     (
                         true,
-                        vec![Tiles::M9 as i32, Tiles::M9 as i32, Tiles::M9 as i32],
+                        vec![Tiles::M9 as i8, Tiles::M9 as i8, Tiles::M9 as i8],
                     ),
                 ],
             },
@@ -629,8 +629,8 @@ mod tests {
                 double_riichi: false,
                 after_kan: false,
                 tile_discarded_by_someone: -1,
-                bakaze: Tiles::E as i32,
-                jikaze: Tiles::E as i32,
+                bakaze: Tiles::E as i8,
+                jikaze: Tiles::E as i8,
                 allow_aka: false,
                 allow_kuitan: false,
                 with_kiriage: false,
@@ -650,10 +650,7 @@ mod tests {
         assert_eq!(r.is_agari, true);
         assert_eq!(r.ten, 7800);
         assert_eq!(r.outgoing_ten.unwrap(), (2600, 1300));
-        assert_eq!(
-            r.yaku,
-            vec![(Yaku::Toitoi as i32, 2), (Yaku::Haku as i32, 1)]
-        );
+        assert_eq!(r.yaku, vec![(Yaku::Toitoi as i8, 2), (Yaku::Haku as i8, 1)]);
         assert_eq!(r.yakuman, 0);
     }
 
@@ -662,24 +659,24 @@ mod tests {
         let res = calc_riichi(
             RiichiHand {
                 closed_part: vec![
-                    Tiles::M2 as i32,
-                    Tiles::M2 as i32,
-                    Tiles::M2 as i32,
-                    Tiles::M5 as i32,
-                    Tiles::M5 as i32,
+                    Tiles::M2 as i8,
+                    Tiles::M2 as i8,
+                    Tiles::M2 as i8,
+                    Tiles::M5 as i8,
+                    Tiles::M5 as i8,
                 ],
                 open_part: vec![
                     (
                         true,
-                        vec![Tiles::M3 as i32, Tiles::M3 as i32, Tiles::M3 as i32],
+                        vec![Tiles::M3 as i8, Tiles::M3 as i8, Tiles::M3 as i8],
                     ),
                     (
                         true,
-                        vec![Tiles::M4 as i32, Tiles::M4 as i32, Tiles::M4 as i32],
+                        vec![Tiles::M4 as i8, Tiles::M4 as i8, Tiles::M4 as i8],
                     ),
                     (
                         true,
-                        vec![Tiles::M9 as i32, Tiles::M9 as i32, Tiles::M9 as i32],
+                        vec![Tiles::M9 as i8, Tiles::M9 as i8, Tiles::M9 as i8],
                     ),
                 ],
             },
@@ -692,8 +689,8 @@ mod tests {
                 double_riichi: false,
                 after_kan: false,
                 tile_discarded_by_someone: -1,
-                bakaze: Tiles::E as i32,
-                jikaze: Tiles::E as i32,
+                bakaze: Tiles::E as i8,
+                jikaze: Tiles::E as i8,
                 allow_aka: false,
                 allow_kuitan: false,
                 with_kiriage: false,
@@ -715,7 +712,7 @@ mod tests {
         assert_eq!(r.outgoing_ten.unwrap(), (6000, 3000));
         assert_eq!(
             r.yaku,
-            vec![(Yaku::Chinitsu as i32, 5), (Yaku::Toitoi as i32, 2)]
+            vec![(Yaku::Chinitsu as i8, 5), (Yaku::Toitoi as i8, 2)]
         );
         assert_eq!(r.yakuman, 0);
     }
@@ -725,20 +722,20 @@ mod tests {
         let res = calc_riichi(
             RiichiHand {
                 closed_part: vec![
-                    Tiles::M1 as i32,
-                    Tiles::M2 as i32,
-                    Tiles::M3 as i32,
-                    Tiles::P1 as i32,
-                    Tiles::P2 as i32,
-                    Tiles::P3 as i32,
-                    Tiles::M7 as i32,
-                    Tiles::M8 as i32,
-                    Tiles::M9 as i32,
-                    Tiles::N as i32,
-                    Tiles::N as i32,
-                    Tiles::N as i32,
-                    Tiles::S as i32,
-                    Tiles::S as i32,
+                    Tiles::M1 as i8,
+                    Tiles::M2 as i8,
+                    Tiles::M3 as i8,
+                    Tiles::P1 as i8,
+                    Tiles::P2 as i8,
+                    Tiles::P3 as i8,
+                    Tiles::M7 as i8,
+                    Tiles::M8 as i8,
+                    Tiles::M9 as i8,
+                    Tiles::N as i8,
+                    Tiles::N as i8,
+                    Tiles::N as i8,
+                    Tiles::S as i8,
+                    Tiles::S as i8,
                 ],
                 open_part: vec![],
             },
@@ -751,8 +748,8 @@ mod tests {
                 double_riichi: false,
                 after_kan: false,
                 tile_discarded_by_someone: -1,
-                bakaze: Tiles::E as i32,
-                jikaze: Tiles::W as i32,
+                bakaze: Tiles::E as i8,
+                jikaze: Tiles::W as i8,
                 allow_aka: false,
                 allow_kuitan: false,
                 with_kiriage: false,
@@ -774,7 +771,7 @@ mod tests {
         assert_eq!(r.outgoing_ten.unwrap(), (2600, 1300));
         assert_eq!(
             r.yaku,
-            vec![(Yaku::Chanta as i32, 2), (Yaku::Menzentsumo as i32, 1)]
+            vec![(Yaku::Chanta as i8, 2), (Yaku::Menzentsumo as i8, 1)]
         );
         assert_eq!(r.yakuman, 0);
     }
@@ -784,20 +781,20 @@ mod tests {
         let res = calc_riichi(
             RiichiHand {
                 closed_part: vec![
-                    Tiles::M1 as i32,
-                    Tiles::M2 as i32,
-                    Tiles::M3 as i32,
-                    Tiles::M7 as i32,
-                    Tiles::M8 as i32,
-                    Tiles::M9 as i32,
-                    Tiles::M4 as i32,
-                    Tiles::M5 as i32,
-                    Tiles::M6 as i32,
-                    Tiles::S3 as i32,
-                    Tiles::S3 as i32,
-                    Tiles::P4 as i32,
-                    Tiles::P5 as i32,
-                    Tiles::P6 as i32,
+                    Tiles::M1 as i8,
+                    Tiles::M2 as i8,
+                    Tiles::M3 as i8,
+                    Tiles::M7 as i8,
+                    Tiles::M8 as i8,
+                    Tiles::M9 as i8,
+                    Tiles::M4 as i8,
+                    Tiles::M5 as i8,
+                    Tiles::M6 as i8,
+                    Tiles::S3 as i8,
+                    Tiles::S3 as i8,
+                    Tiles::P4 as i8,
+                    Tiles::P5 as i8,
+                    Tiles::P6 as i8,
                 ],
                 open_part: vec![],
             },
@@ -810,8 +807,8 @@ mod tests {
                 double_riichi: false,
                 after_kan: false,
                 tile_discarded_by_someone: -1,
-                bakaze: Tiles::E as i32,
-                jikaze: Tiles::W as i32,
+                bakaze: Tiles::E as i8,
+                jikaze: Tiles::W as i8,
                 allow_aka: false,
                 allow_kuitan: false,
                 with_kiriage: false,
@@ -834,9 +831,9 @@ mod tests {
         assert_eq!(
             r.yaku,
             vec![
-                (Yaku::Ittsu as i32, 2),
-                (Yaku::Pinfu as i32, 1),
-                (Yaku::Menzentsumo as i32, 1)
+                (Yaku::Ittsu as i8, 2),
+                (Yaku::Pinfu as i8, 1),
+                (Yaku::Menzentsumo as i8, 1)
             ]
         );
         assert_eq!(r.yakuman, 0);
@@ -847,23 +844,23 @@ mod tests {
         let res = calc_riichi(
             RiichiHand {
                 closed_part: vec![
-                    Tiles::M1 as i32,
-                    Tiles::M1 as i32,
-                    Tiles::M1 as i32,
-                    Tiles::WD as i32,
-                    Tiles::WD as i32,
-                    Tiles::WD as i32,
-                    Tiles::S as i32,
-                    Tiles::S as i32,
+                    Tiles::M1 as i8,
+                    Tiles::M1 as i8,
+                    Tiles::M1 as i8,
+                    Tiles::WD as i8,
+                    Tiles::WD as i8,
+                    Tiles::WD as i8,
+                    Tiles::S as i8,
+                    Tiles::S as i8,
                 ],
                 open_part: vec![
                     (
                         true,
-                        vec![Tiles::P1 as i32, Tiles::P1 as i32, Tiles::P1 as i32],
+                        vec![Tiles::P1 as i8, Tiles::P1 as i8, Tiles::P1 as i8],
                     ),
                     (
                         true,
-                        vec![Tiles::M9 as i32, Tiles::M9 as i32, Tiles::M9 as i32],
+                        vec![Tiles::M9 as i8, Tiles::M9 as i8, Tiles::M9 as i8],
                     ),
                 ],
             },
@@ -876,8 +873,8 @@ mod tests {
                 double_riichi: false,
                 after_kan: false,
                 tile_discarded_by_someone: -1,
-                bakaze: Tiles::E as i32,
-                jikaze: Tiles::W as i32,
+                bakaze: Tiles::E as i8,
+                jikaze: Tiles::W as i8,
                 allow_aka: false,
                 allow_kuitan: false,
                 with_kiriage: false,
@@ -900,9 +897,9 @@ mod tests {
         assert_eq!(
             r.yaku,
             vec![
-                (Yaku::Toitoi as i32, 2),
-                (Yaku::Honroutou as i32, 2),
-                (Yaku::Haku as i32, 1)
+                (Yaku::Toitoi as i8, 2),
+                (Yaku::Honroutou as i8, 2),
+                (Yaku::Haku as i8, 1)
             ]
         );
         assert_eq!(r.yakuman, 0);
@@ -913,20 +910,20 @@ mod tests {
         let res = calc_riichi(
             RiichiHand {
                 closed_part: vec![
-                    Tiles::P2 as i32,
-                    Tiles::P3 as i32,
-                    Tiles::P5 as i32,
-                    Tiles::P6 as i32,
-                    Tiles::P7 as i32,
-                    Tiles::M5 as i32,
-                    Tiles::M6 as i32,
-                    Tiles::M7 as i32,
-                    Tiles::S5 as i32,
-                    Tiles::S6 as i32,
-                    Tiles::S7 as i32,
-                    Tiles::S3 as i32,
-                    Tiles::S3 as i32,
-                    Tiles::P4 as i32,
+                    Tiles::P2 as i8,
+                    Tiles::P3 as i8,
+                    Tiles::P5 as i8,
+                    Tiles::P6 as i8,
+                    Tiles::P7 as i8,
+                    Tiles::M5 as i8,
+                    Tiles::M6 as i8,
+                    Tiles::M7 as i8,
+                    Tiles::S5 as i8,
+                    Tiles::S6 as i8,
+                    Tiles::S7 as i8,
+                    Tiles::S3 as i8,
+                    Tiles::S3 as i8,
+                    Tiles::P4 as i8,
                 ],
                 open_part: vec![],
             },
@@ -939,8 +936,8 @@ mod tests {
                 double_riichi: false,
                 after_kan: false,
                 tile_discarded_by_someone: -1,
-                bakaze: Tiles::E as i32,
-                jikaze: Tiles::W as i32,
+                bakaze: Tiles::E as i8,
+                jikaze: Tiles::W as i8,
                 allow_aka: false,
                 allow_kuitan: false,
                 with_kiriage: false,
@@ -963,10 +960,10 @@ mod tests {
         assert_eq!(
             r.yaku,
             vec![
-                (Yaku::Sanshoku as i32, 2),
-                (Yaku::Tanyao as i32, 1),
-                (Yaku::Pinfu as i32, 1),
-                (Yaku::Menzentsumo as i32, 1),
+                (Yaku::Sanshoku as i8, 2),
+                (Yaku::Tanyao as i8, 1),
+                (Yaku::Pinfu as i8, 1),
+                (Yaku::Menzentsumo as i8, 1),
             ]
         );
         assert_eq!(r.yakuman, 0);
@@ -977,20 +974,20 @@ mod tests {
         let res = calc_riichi(
             RiichiHand {
                 closed_part: vec![
-                    Tiles::M2 as i32,
-                    Tiles::M2 as i32,
-                    Tiles::M3 as i32,
-                    Tiles::M3 as i32,
-                    Tiles::S3 as i32,
-                    Tiles::S3 as i32,
-                    Tiles::S4 as i32,
-                    Tiles::S4 as i32,
-                    Tiles::S5 as i32,
-                    Tiles::S5 as i32,
-                    Tiles::S8 as i32,
-                    Tiles::S8 as i32,
-                    Tiles::M8 as i32,
-                    Tiles::M8 as i32,
+                    Tiles::M2 as i8,
+                    Tiles::M2 as i8,
+                    Tiles::M3 as i8,
+                    Tiles::M3 as i8,
+                    Tiles::S3 as i8,
+                    Tiles::S3 as i8,
+                    Tiles::S4 as i8,
+                    Tiles::S4 as i8,
+                    Tiles::S5 as i8,
+                    Tiles::S5 as i8,
+                    Tiles::S8 as i8,
+                    Tiles::S8 as i8,
+                    Tiles::M8 as i8,
+                    Tiles::M8 as i8,
                 ],
                 open_part: vec![],
             },
@@ -1003,8 +1000,8 @@ mod tests {
                 double_riichi: false,
                 after_kan: false,
                 tile_discarded_by_someone: -1,
-                bakaze: Tiles::E as i32,
-                jikaze: Tiles::W as i32,
+                bakaze: Tiles::E as i8,
+                jikaze: Tiles::W as i8,
                 allow_aka: false,
                 allow_kuitan: false,
                 with_kiriage: false,
@@ -1027,9 +1024,9 @@ mod tests {
         assert_eq!(
             r.yaku,
             vec![
-                (Yaku::Chiitoitsu as i32, 2),
-                (Yaku::Tanyao as i32, 1),
-                (Yaku::Menzentsumo as i32, 1),
+                (Yaku::Chiitoitsu as i8, 2),
+                (Yaku::Tanyao as i8, 1),
+                (Yaku::Menzentsumo as i8, 1),
             ]
         );
         assert_eq!(r.yakuman, 0);
@@ -1040,21 +1037,21 @@ mod tests {
         let res = calc_riichi(
             RiichiHand {
                 closed_part: vec![
-                    Tiles::E as i32,
-                    Tiles::E as i32,
-                    Tiles::E as i32,
-                    Tiles::P3 as i32,
-                    Tiles::P4 as i32,
-                    Tiles::P5 as i32,
-                    Tiles::M4 as i32,
-                    Tiles::M4 as i32,
-                    Tiles::S3 as i32,
-                    Tiles::S4 as i32,
-                    Tiles::S5 as i32,
+                    Tiles::E as i8,
+                    Tiles::E as i8,
+                    Tiles::E as i8,
+                    Tiles::P3 as i8,
+                    Tiles::P4 as i8,
+                    Tiles::P5 as i8,
+                    Tiles::M4 as i8,
+                    Tiles::M4 as i8,
+                    Tiles::S3 as i8,
+                    Tiles::S4 as i8,
+                    Tiles::S5 as i8,
                 ],
                 open_part: vec![(
                     true,
-                    vec![Tiles::WD as i32, Tiles::WD as i32, Tiles::WD as i32],
+                    vec![Tiles::WD as i8, Tiles::WD as i8, Tiles::WD as i8],
                 )],
             },
             &mut RiichiOptions {
@@ -1066,8 +1063,8 @@ mod tests {
                 double_riichi: false,
                 after_kan: false,
                 tile_discarded_by_someone: -1,
-                bakaze: Tiles::E as i32,
-                jikaze: Tiles::W as i32,
+                bakaze: Tiles::E as i8,
+                jikaze: Tiles::W as i8,
                 allow_aka: false,
                 allow_kuitan: false,
                 with_kiriage: false,
@@ -1089,7 +1086,7 @@ mod tests {
         assert_eq!(r.outgoing_ten.unwrap(), (1300, 700));
         assert_eq!(
             r.yaku,
-            vec![(Yaku::RoundWindEast as i32, 1), (Yaku::Haku as i32, 1),]
+            vec![(Yaku::RoundWindEast as i8, 1), (Yaku::Haku as i8, 1),]
         );
         assert_eq!(r.yakuman, 0);
     }
@@ -1099,19 +1096,19 @@ mod tests {
         let res = calc_riichi(
             RiichiHand {
                 closed_part: vec![
-                    Tiles::P3 as i32,
-                    Tiles::P4 as i32,
-                    Tiles::P5 as i32,
-                    Tiles::P4 as i32,
-                    Tiles::P5 as i32,
-                    Tiles::S6 as i32,
-                    Tiles::S7 as i32,
-                    Tiles::S8 as i32,
-                    Tiles::S6 as i32,
-                    Tiles::S7 as i32,
-                    Tiles::S8 as i32,
-                    Tiles::P8 as i32,
-                    Tiles::P8 as i32,
+                    Tiles::P3 as i8,
+                    Tiles::P4 as i8,
+                    Tiles::P5 as i8,
+                    Tiles::P4 as i8,
+                    Tiles::P5 as i8,
+                    Tiles::S6 as i8,
+                    Tiles::S7 as i8,
+                    Tiles::S8 as i8,
+                    Tiles::S6 as i8,
+                    Tiles::S7 as i8,
+                    Tiles::S8 as i8,
+                    Tiles::P8 as i8,
+                    Tiles::P8 as i8,
                 ],
                 open_part: vec![],
             },
@@ -1123,9 +1120,9 @@ mod tests {
                 ippatsu: false,
                 double_riichi: false,
                 after_kan: false,
-                tile_discarded_by_someone: Tiles::P3 as i32,
-                bakaze: Tiles::E as i32,
-                jikaze: Tiles::W as i32,
+                tile_discarded_by_someone: Tiles::P3 as i8,
+                bakaze: Tiles::E as i8,
+                jikaze: Tiles::W as i8,
                 allow_aka: false,
                 allow_kuitan: false,
                 with_kiriage: false,
@@ -1147,9 +1144,9 @@ mod tests {
         assert_eq!(
             r.yaku,
             vec![
-                (Yaku::Ryanpeikou as i32, 3),
-                (Yaku::Tanyao as i32, 1),
-                (Yaku::Pinfu as i32, 1),
+                (Yaku::Ryanpeikou as i8, 3),
+                (Yaku::Tanyao as i8, 1),
+                (Yaku::Pinfu as i8, 1),
             ]
         );
         assert_eq!(r.yakuman, 0);
@@ -1160,23 +1157,20 @@ mod tests {
         let res = calc_riichi(
             RiichiHand {
                 closed_part: vec![
-                    Tiles::WD as i32,
-                    Tiles::WD as i32,
-                    Tiles::WD as i32,
-                    Tiles::P1 as i32,
-                    Tiles::P2 as i32,
-                    Tiles::P3 as i32,
-                    Tiles::P7 as i32,
-                    Tiles::P7 as i32,
+                    Tiles::WD as i8,
+                    Tiles::WD as i8,
+                    Tiles::WD as i8,
+                    Tiles::P1 as i8,
+                    Tiles::P2 as i8,
+                    Tiles::P3 as i8,
+                    Tiles::P7 as i8,
+                    Tiles::P7 as i8,
                 ],
                 open_part: vec![
+                    (true, vec![Tiles::E as i8, Tiles::E as i8, Tiles::E as i8]),
                     (
                         true,
-                        vec![Tiles::E as i32, Tiles::E as i32, Tiles::E as i32],
-                    ),
-                    (
-                        true,
-                        vec![Tiles::P4 as i32, Tiles::P5 as i32, Tiles::P6 as i32],
+                        vec![Tiles::P4 as i8, Tiles::P5 as i8, Tiles::P6 as i8],
                     ),
                 ],
             },
@@ -1189,8 +1183,8 @@ mod tests {
                 double_riichi: false,
                 after_kan: false,
                 tile_discarded_by_someone: -1,
-                bakaze: Tiles::E as i32,
-                jikaze: Tiles::W as i32,
+                bakaze: Tiles::E as i8,
+                jikaze: Tiles::W as i8,
                 allow_aka: false,
                 allow_kuitan: false,
                 with_kiriage: false,
@@ -1213,9 +1207,9 @@ mod tests {
         assert_eq!(
             r.yaku,
             vec![
-                (Yaku::Honitsu as i32, 2),
-                (Yaku::RoundWindEast as i32, 1),
-                (Yaku::Haku as i32, 1),
+                (Yaku::Honitsu as i8, 2),
+                (Yaku::RoundWindEast as i8, 1),
+                (Yaku::Haku as i8, 1),
             ]
         );
         assert_eq!(r.yakuman, 0);
@@ -1226,19 +1220,19 @@ mod tests {
         let res = calc_riichi(
             RiichiHand {
                 closed_part: vec![
-                    Tiles::S1 as i32,
-                    Tiles::S1 as i32,
-                    Tiles::S1 as i32,
-                    Tiles::S3 as i32,
-                    Tiles::S4 as i32,
-                    Tiles::S5 as i32,
-                    Tiles::S7 as i32,
-                    Tiles::S8 as i32,
-                    Tiles::S9 as i32,
-                    Tiles::E as i32,
-                    Tiles::E as i32,
-                    Tiles::E as i32,
-                    Tiles::S as i32,
+                    Tiles::S1 as i8,
+                    Tiles::S1 as i8,
+                    Tiles::S1 as i8,
+                    Tiles::S3 as i8,
+                    Tiles::S4 as i8,
+                    Tiles::S5 as i8,
+                    Tiles::S7 as i8,
+                    Tiles::S8 as i8,
+                    Tiles::S9 as i8,
+                    Tiles::E as i8,
+                    Tiles::E as i8,
+                    Tiles::E as i8,
+                    Tiles::S as i8,
                 ],
                 open_part: vec![],
             },
@@ -1250,9 +1244,9 @@ mod tests {
                 ippatsu: false,
                 double_riichi: false,
                 after_kan: false,
-                tile_discarded_by_someone: Tiles::S as i32,
-                bakaze: Tiles::E as i32,
-                jikaze: Tiles::W as i32,
+                tile_discarded_by_someone: Tiles::S as i8,
+                bakaze: Tiles::E as i8,
+                jikaze: Tiles::W as i8,
                 allow_aka: false,
                 allow_kuitan: false,
                 with_kiriage: false,
@@ -1273,7 +1267,7 @@ mod tests {
         assert_eq!(r.ten, 8000);
         assert_eq!(
             r.yaku,
-            vec![(Yaku::Honitsu as i32, 3), (Yaku::RoundWindEast as i32, 1),]
+            vec![(Yaku::Honitsu as i8, 3), (Yaku::RoundWindEast as i8, 1),]
         );
         assert_eq!(r.yakuman, 0);
     }
@@ -1283,22 +1277,22 @@ mod tests {
         let res = calc_riichi(
             RiichiHand {
                 closed_part: vec![
-                    Tiles::P2 as i32,
-                    Tiles::P2 as i32,
-                    Tiles::P2 as i32,
-                    Tiles::P3 as i32,
-                    Tiles::P3 as i32,
-                    Tiles::P4 as i32,
-                    Tiles::P4 as i32,
+                    Tiles::P2 as i8,
+                    Tiles::P2 as i8,
+                    Tiles::P2 as i8,
+                    Tiles::P3 as i8,
+                    Tiles::P3 as i8,
+                    Tiles::P4 as i8,
+                    Tiles::P4 as i8,
                 ],
                 open_part: vec![
                     (
                         true,
-                        vec![Tiles::P4 as i32, Tiles::P5 as i32, Tiles::P6 as i32],
+                        vec![Tiles::P4 as i8, Tiles::P5 as i8, Tiles::P6 as i8],
                     ),
                     (
                         true,
-                        vec![Tiles::P5 as i32, Tiles::P6 as i32, Tiles::P7 as i32],
+                        vec![Tiles::P5 as i8, Tiles::P6 as i8, Tiles::P7 as i8],
                     ),
                 ],
             },
@@ -1310,9 +1304,9 @@ mod tests {
                 ippatsu: false,
                 double_riichi: false,
                 after_kan: false,
-                tile_discarded_by_someone: Tiles::P5 as i32,
-                bakaze: Tiles::E as i32,
-                jikaze: Tiles::W as i32,
+                tile_discarded_by_someone: Tiles::P5 as i8,
+                bakaze: Tiles::E as i8,
+                jikaze: Tiles::W as i8,
                 allow_aka: false,
                 allow_kuitan: true, // enable open tanyao
                 with_kiriage: false,
@@ -1333,7 +1327,7 @@ mod tests {
         assert_eq!(r.ten, 12000);
         assert_eq!(
             r.yaku,
-            vec![(Yaku::Chinitsu as i32, 5), (Yaku::Tanyao as i32, 1)]
+            vec![(Yaku::Chinitsu as i8, 5), (Yaku::Tanyao as i8, 1)]
         );
         assert_eq!(r.yakuman, 0);
     }
@@ -1343,19 +1337,19 @@ mod tests {
         let res = calc_riichi(
             RiichiHand {
                 closed_part: vec![
-                    Tiles::P3 as i32,
-                    Tiles::P4 as i32,
-                    Tiles::P5 as i32,
-                    Tiles::P3 as i32,
-                    Tiles::P4 as i32,
-                    Tiles::P5 as i32,
-                    Tiles::M1 as i32,
-                    Tiles::M1 as i32,
-                    Tiles::M1 as i32,
-                    Tiles::GD as i32,
-                    Tiles::GD as i32,
-                    Tiles::GD as i32,
-                    Tiles::M3 as i32,
+                    Tiles::P3 as i8,
+                    Tiles::P4 as i8,
+                    Tiles::P5 as i8,
+                    Tiles::P3 as i8,
+                    Tiles::P4 as i8,
+                    Tiles::P5 as i8,
+                    Tiles::M1 as i8,
+                    Tiles::M1 as i8,
+                    Tiles::M1 as i8,
+                    Tiles::GD as i8,
+                    Tiles::GD as i8,
+                    Tiles::GD as i8,
+                    Tiles::M3 as i8,
                 ],
                 open_part: vec![],
             },
@@ -1367,9 +1361,9 @@ mod tests {
                 ippatsu: false,
                 double_riichi: false,
                 after_kan: false,
-                tile_discarded_by_someone: Tiles::M3 as i32,
-                bakaze: Tiles::E as i32,
-                jikaze: Tiles::W as i32,
+                tile_discarded_by_someone: Tiles::M3 as i8,
+                bakaze: Tiles::E as i8,
+                jikaze: Tiles::W as i8,
                 allow_aka: false,
                 allow_kuitan: false,
                 with_kiriage: false,
@@ -1390,7 +1384,7 @@ mod tests {
         assert_eq!(r.ten, 3200);
         assert_eq!(
             r.yaku,
-            vec![(Yaku::Iipeikou as i32, 1), (Yaku::Hatsu as i32, 1),]
+            vec![(Yaku::Iipeikou as i8, 1), (Yaku::Hatsu as i8, 1),]
         );
         assert_eq!(r.yakuman, 0);
     }
@@ -1400,20 +1394,20 @@ mod tests {
         let res = calc_riichi(
             RiichiHand {
                 closed_part: vec![
-                    Tiles::WD as i32,
-                    Tiles::WD as i32,
-                    Tiles::M1 as i32,
-                    Tiles::M1 as i32,
-                    Tiles::M4 as i32,
-                    Tiles::M4 as i32,
-                    Tiles::M3 as i32,
-                    Tiles::M3 as i32,
-                    Tiles::W as i32,
-                    Tiles::W as i32,
-                    Tiles::M7 as i32,
-                    Tiles::M7 as i32,
-                    Tiles::M9 as i32,
-                    Tiles::M9 as i32,
+                    Tiles::WD as i8,
+                    Tiles::WD as i8,
+                    Tiles::M1 as i8,
+                    Tiles::M1 as i8,
+                    Tiles::M4 as i8,
+                    Tiles::M4 as i8,
+                    Tiles::M3 as i8,
+                    Tiles::M3 as i8,
+                    Tiles::W as i8,
+                    Tiles::W as i8,
+                    Tiles::M7 as i8,
+                    Tiles::M7 as i8,
+                    Tiles::M9 as i8,
+                    Tiles::M9 as i8,
                 ],
                 open_part: vec![],
             },
@@ -1426,8 +1420,8 @@ mod tests {
                 double_riichi: false,
                 after_kan: false,
                 tile_discarded_by_someone: -1,
-                bakaze: Tiles::E as i32,
-                jikaze: Tiles::W as i32,
+                bakaze: Tiles::E as i8,
+                jikaze: Tiles::W as i8,
                 allow_aka: false,
                 allow_kuitan: false,
                 with_kiriage: false,
@@ -1450,9 +1444,9 @@ mod tests {
         assert_eq!(
             r.yaku,
             vec![
-                (Yaku::Honitsu as i32, 3),
-                (Yaku::Chiitoitsu as i32, 2),
-                (Yaku::Menzentsumo as i32, 1),
+                (Yaku::Honitsu as i8, 3),
+                (Yaku::Chiitoitsu as i8, 2),
+                (Yaku::Menzentsumo as i8, 1),
             ]
         );
         assert_eq!(r.yakuman, 0);
@@ -1462,42 +1456,42 @@ mod tests {
     pub fn should_parse_suukantsu() {
         let res = calc_riichi(
             RiichiHand {
-                closed_part: vec![Tiles::M1 as i32],
+                closed_part: vec![Tiles::M1 as i8],
                 open_part: vec![
                     (
                         true,
                         vec![
-                            Tiles::S7 as i32,
-                            Tiles::S7 as i32,
-                            Tiles::S7 as i32,
-                            Tiles::S7 as i32,
+                            Tiles::S7 as i8,
+                            Tiles::S7 as i8,
+                            Tiles::S7 as i8,
+                            Tiles::S7 as i8,
                         ],
                     ),
                     (
                         false,
                         vec![
-                            Tiles::W as i32,
-                            Tiles::W as i32,
-                            Tiles::W as i32,
-                            Tiles::W as i32,
+                            Tiles::W as i8,
+                            Tiles::W as i8,
+                            Tiles::W as i8,
+                            Tiles::W as i8,
                         ],
                     ),
                     (
                         true,
                         vec![
-                            Tiles::S1 as i32,
-                            Tiles::S1 as i32,
-                            Tiles::S1 as i32,
-                            Tiles::S1 as i32,
+                            Tiles::S1 as i8,
+                            Tiles::S1 as i8,
+                            Tiles::S1 as i8,
+                            Tiles::S1 as i8,
                         ],
                     ),
                     (
                         true,
                         vec![
-                            Tiles::P4 as i32,
-                            Tiles::P4 as i32,
-                            Tiles::P4 as i32,
-                            Tiles::P4 as i32,
+                            Tiles::P4 as i8,
+                            Tiles::P4 as i8,
+                            Tiles::P4 as i8,
+                            Tiles::P4 as i8,
                         ],
                     ),
                 ],
@@ -1510,9 +1504,9 @@ mod tests {
                 ippatsu: false,
                 double_riichi: false,
                 after_kan: false,
-                tile_discarded_by_someone: Tiles::M1 as i32,
-                bakaze: Tiles::E as i32,
-                jikaze: Tiles::W as i32,
+                tile_discarded_by_someone: Tiles::M1 as i8,
+                bakaze: Tiles::E as i8,
+                jikaze: Tiles::W as i8,
                 allow_aka: false,
                 allow_kuitan: true, // enable open tanyao
                 with_kiriage: false,
@@ -1531,7 +1525,7 @@ mod tests {
         assert_eq!(r.han, 0);
         assert_eq!(r.is_agari, true);
         assert_eq!(r.ten, 32000);
-        assert_eq!(r.yaku, vec![(Yaku::Suukantsu as i32, 13)]);
+        assert_eq!(r.yaku, vec![(Yaku::Suukantsu as i8, 13)]);
         assert_eq!(r.yakuman, 1);
     }
 
@@ -1540,38 +1534,38 @@ mod tests {
         let res = calc_riichi(
             RiichiHand {
                 closed_part: vec![
-                    Tiles::M3 as i32,
-                    Tiles::M3 as i32,
-                    Tiles::M3 as i32,
-                    Tiles::P4 as i32,
-                    Tiles::P4 as i32,
+                    Tiles::M3 as i8,
+                    Tiles::M3 as i8,
+                    Tiles::M3 as i8,
+                    Tiles::P4 as i8,
+                    Tiles::P4 as i8,
                 ],
                 open_part: vec![
                     (
                         false,
                         vec![
-                            Tiles::RD as i32,
-                            Tiles::RD as i32,
-                            Tiles::RD as i32,
-                            Tiles::RD as i32,
+                            Tiles::RD as i8,
+                            Tiles::RD as i8,
+                            Tiles::RD as i8,
+                            Tiles::RD as i8,
                         ],
                     ),
                     (
                         true,
                         vec![
-                            Tiles::S4 as i32,
-                            Tiles::S4 as i32,
-                            Tiles::S4 as i32,
-                            Tiles::S4 as i32,
+                            Tiles::S4 as i8,
+                            Tiles::S4 as i8,
+                            Tiles::S4 as i8,
+                            Tiles::S4 as i8,
                         ],
                     ),
                     (
                         true,
                         vec![
-                            Tiles::P3 as i32,
-                            Tiles::P3 as i32,
-                            Tiles::P3 as i32,
-                            Tiles::P3 as i32,
+                            Tiles::P3 as i8,
+                            Tiles::P3 as i8,
+                            Tiles::P3 as i8,
+                            Tiles::P3 as i8,
                         ],
                     ),
                 ],
@@ -1585,8 +1579,8 @@ mod tests {
                 double_riichi: false,
                 after_kan: false,
                 tile_discarded_by_someone: -1,
-                bakaze: Tiles::E as i32,
-                jikaze: Tiles::W as i32,
+                bakaze: Tiles::E as i8,
+                jikaze: Tiles::W as i8,
                 allow_aka: false,
                 allow_kuitan: true, // enable open tanyao
                 with_kiriage: false,
@@ -1608,9 +1602,9 @@ mod tests {
         assert_eq!(
             r.yaku,
             vec![
-                (Yaku::Toitoi as i32, 2),
-                (Yaku::Sankantsu as i32, 2),
-                (Yaku::Chun as i32, 1),
+                (Yaku::Toitoi as i8, 2),
+                (Yaku::Sankantsu as i8, 2),
+                (Yaku::Chun as i8, 1),
             ]
         );
         assert_eq!(r.yakuman, 0);
@@ -1621,20 +1615,20 @@ mod tests {
         let res = calc_riichi(
             RiichiHand {
                 closed_part: vec![
-                    Tiles::M3 as i32,
-                    Tiles::M3 as i32,
-                    Tiles::M3 as i32,
-                    Tiles::M6 as i32,
-                    Tiles::M6 as i32,
-                    Tiles::M6 as i32,
-                    Tiles::WD as i32,
-                    Tiles::WD as i32,
-                    Tiles::WD as i32,
-                    Tiles::P9 as i32,
+                    Tiles::M3 as i8,
+                    Tiles::M3 as i8,
+                    Tiles::M3 as i8,
+                    Tiles::M6 as i8,
+                    Tiles::M6 as i8,
+                    Tiles::M6 as i8,
+                    Tiles::WD as i8,
+                    Tiles::WD as i8,
+                    Tiles::WD as i8,
+                    Tiles::P9 as i8,
                 ],
                 open_part: vec![(
                     true,
-                    vec![Tiles::S4 as i32, Tiles::S4 as i32, Tiles::S4 as i32],
+                    vec![Tiles::S4 as i8, Tiles::S4 as i8, Tiles::S4 as i8],
                 )],
             },
             &mut RiichiOptions {
@@ -1645,9 +1639,9 @@ mod tests {
                 ippatsu: false,
                 double_riichi: false,
                 after_kan: false,
-                tile_discarded_by_someone: Tiles::P9 as i32,
-                bakaze: Tiles::E as i32,
-                jikaze: Tiles::W as i32,
+                tile_discarded_by_someone: Tiles::P9 as i8,
+                bakaze: Tiles::E as i8,
+                jikaze: Tiles::W as i8,
                 allow_aka: false,
                 allow_kuitan: true, // enable open tanyao
                 with_kiriage: false,
@@ -1669,9 +1663,9 @@ mod tests {
         assert_eq!(
             r.yaku,
             vec![
-                (Yaku::Toitoi as i32, 2),
-                (Yaku::Sanankou as i32, 2),
-                (Yaku::Haku as i32, 1),
+                (Yaku::Toitoi as i8, 2),
+                (Yaku::Sanankou as i8, 2),
+                (Yaku::Haku as i8, 1),
             ]
         );
         assert_eq!(r.yakuman, 0);
@@ -1682,20 +1676,20 @@ mod tests {
         let res = calc_riichi(
             RiichiHand {
                 closed_part: vec![
-                    Tiles::M4 as i32,
-                    Tiles::M4 as i32,
-                    Tiles::M4 as i32,
-                    Tiles::P8 as i32,
-                    Tiles::P8 as i32,
-                    Tiles::P8 as i32,
-                    Tiles::S5 as i32,
-                    Tiles::S5 as i32,
-                    Tiles::S5 as i32,
-                    Tiles::S2 as i32,
-                    Tiles::S2 as i32,
-                    Tiles::M2 as i32,
-                    Tiles::M2 as i32,
-                    Tiles::S2 as i32,
+                    Tiles::M4 as i8,
+                    Tiles::M4 as i8,
+                    Tiles::M4 as i8,
+                    Tiles::P8 as i8,
+                    Tiles::P8 as i8,
+                    Tiles::P8 as i8,
+                    Tiles::S5 as i8,
+                    Tiles::S5 as i8,
+                    Tiles::S5 as i8,
+                    Tiles::S2 as i8,
+                    Tiles::S2 as i8,
+                    Tiles::M2 as i8,
+                    Tiles::M2 as i8,
+                    Tiles::S2 as i8,
                 ],
                 open_part: vec![],
             },
@@ -1708,8 +1702,8 @@ mod tests {
                 double_riichi: false,
                 after_kan: false,
                 tile_discarded_by_someone: -1,
-                bakaze: Tiles::E as i32,
-                jikaze: Tiles::W as i32,
+                bakaze: Tiles::E as i8,
+                jikaze: Tiles::W as i8,
                 allow_aka: false,
                 allow_kuitan: true, // enable open tanyao
                 with_kiriage: false,
@@ -1729,7 +1723,7 @@ mod tests {
         assert_eq!(r.is_agari, true);
         assert_eq!(r.ten, 32000);
         assert_eq!(r.outgoing_ten.unwrap(), (16000, 8000));
-        assert_eq!(r.yaku, vec![(Yaku::Suuankou as i32, 13),]);
+        assert_eq!(r.yaku, vec![(Yaku::Suuankou as i8, 13),]);
         assert_eq!(r.yakuman, 1);
     }
 
@@ -1738,20 +1732,20 @@ mod tests {
         let res = calc_riichi(
             RiichiHand {
                 closed_part: vec![
-                    Tiles::S2 as i32,
-                    Tiles::S2 as i32,
-                    Tiles::S2 as i32,
-                    Tiles::S3 as i32,
-                    Tiles::S3 as i32,
-                    Tiles::S3 as i32,
-                    Tiles::S4 as i32,
-                    Tiles::S4 as i32,
-                    Tiles::S4 as i32,
-                    Tiles::S5 as i32,
-                    Tiles::S5 as i32,
-                    Tiles::S6 as i32,
-                    Tiles::S7 as i32,
-                    Tiles::S8 as i32,
+                    Tiles::S2 as i8,
+                    Tiles::S2 as i8,
+                    Tiles::S2 as i8,
+                    Tiles::S3 as i8,
+                    Tiles::S3 as i8,
+                    Tiles::S3 as i8,
+                    Tiles::S4 as i8,
+                    Tiles::S4 as i8,
+                    Tiles::S4 as i8,
+                    Tiles::S5 as i8,
+                    Tiles::S5 as i8,
+                    Tiles::S6 as i8,
+                    Tiles::S7 as i8,
+                    Tiles::S8 as i8,
                 ],
                 open_part: vec![],
             },
@@ -1764,8 +1758,8 @@ mod tests {
                 double_riichi: false,
                 after_kan: false,
                 tile_discarded_by_someone: -1,
-                bakaze: Tiles::E as i32,
-                jikaze: Tiles::W as i32,
+                bakaze: Tiles::E as i8,
+                jikaze: Tiles::W as i8,
                 allow_aka: false,
                 allow_kuitan: true, // enable open tanyao
                 with_kiriage: false,
@@ -1787,10 +1781,10 @@ mod tests {
         assert_eq!(
             r.yaku,
             vec![
-                (Yaku::Chinitsu as i32, 6),
-                (Yaku::Sanankou as i32, 2),
-                (Yaku::Tanyao as i32, 1),
-                (Yaku::Menzentsumo as i32, 1),
+                (Yaku::Chinitsu as i8, 6),
+                (Yaku::Sanankou as i8, 2),
+                (Yaku::Tanyao as i8, 1),
+                (Yaku::Menzentsumo as i8, 1),
             ]
         );
         assert_eq!(r.yakuman, 0);
@@ -1801,20 +1795,20 @@ mod tests {
         let res = calc_riichi(
             RiichiHand {
                 closed_part: vec![
-                    Tiles::P1 as i32,
-                    Tiles::P2 as i32,
-                    Tiles::M1 as i32,
-                    Tiles::M2 as i32,
-                    Tiles::M3 as i32,
-                    Tiles::P9 as i32,
-                    Tiles::P9 as i32,
-                    Tiles::P9 as i32,
-                    Tiles::M9 as i32,
-                    Tiles::M9 as i32,
+                    Tiles::P1 as i8,
+                    Tiles::P2 as i8,
+                    Tiles::M1 as i8,
+                    Tiles::M2 as i8,
+                    Tiles::M3 as i8,
+                    Tiles::P9 as i8,
+                    Tiles::P9 as i8,
+                    Tiles::P9 as i8,
+                    Tiles::M9 as i8,
+                    Tiles::M9 as i8,
                 ],
                 open_part: vec![(
                     true,
-                    vec![Tiles::S3 as i32, Tiles::S1 as i32, Tiles::S2 as i32],
+                    vec![Tiles::S3 as i8, Tiles::S1 as i8, Tiles::S2 as i8],
                 )],
             },
             &mut RiichiOptions {
@@ -1825,9 +1819,9 @@ mod tests {
                 ippatsu: false,
                 double_riichi: false,
                 after_kan: false,
-                tile_discarded_by_someone: Tiles::P3 as i32,
-                bakaze: Tiles::E as i32,
-                jikaze: Tiles::W as i32,
+                tile_discarded_by_someone: Tiles::P3 as i8,
+                bakaze: Tiles::E as i8,
+                jikaze: Tiles::W as i8,
                 allow_aka: false,
                 allow_kuitan: true, // enable open tanyao
                 with_kiriage: false,
@@ -1848,7 +1842,7 @@ mod tests {
         assert_eq!(r.ten, 8000);
         assert_eq!(
             r.yaku,
-            vec![(Yaku::Junchan as i32, 3), (Yaku::Sanshoku as i32, 2),]
+            vec![(Yaku::Junchan as i8, 3), (Yaku::Sanshoku as i8, 2),]
         );
         assert_eq!(r.yakuman, 0);
     }
@@ -1858,19 +1852,19 @@ mod tests {
         let res = calc_riichi(
             RiichiHand {
                 closed_part: vec![
-                    Tiles::M2 as i32,
-                    Tiles::M3 as i32,
-                    Tiles::M7 as i32,
-                    Tiles::M8 as i32,
-                    Tiles::M9 as i32,
-                    Tiles::P1 as i32,
-                    Tiles::P2 as i32,
-                    Tiles::P3 as i32,
-                    Tiles::S7 as i32,
-                    Tiles::S8 as i32,
-                    Tiles::S9 as i32,
-                    Tiles::S9 as i32,
-                    Tiles::S9 as i32,
+                    Tiles::M2 as i8,
+                    Tiles::M3 as i8,
+                    Tiles::M7 as i8,
+                    Tiles::M8 as i8,
+                    Tiles::M9 as i8,
+                    Tiles::P1 as i8,
+                    Tiles::P2 as i8,
+                    Tiles::P3 as i8,
+                    Tiles::S7 as i8,
+                    Tiles::S8 as i8,
+                    Tiles::S9 as i8,
+                    Tiles::S9 as i8,
+                    Tiles::S9 as i8,
                 ],
                 open_part: vec![],
             },
@@ -1882,9 +1876,9 @@ mod tests {
                 ippatsu: false,
                 double_riichi: false,
                 after_kan: false,
-                tile_discarded_by_someone: Tiles::M1 as i32,
-                bakaze: Tiles::E as i32,
-                jikaze: Tiles::W as i32,
+                tile_discarded_by_someone: Tiles::M1 as i8,
+                bakaze: Tiles::E as i8,
+                jikaze: Tiles::W as i8,
                 allow_aka: false,
                 allow_kuitan: true, // enable open tanyao
                 with_kiriage: false,
@@ -1905,7 +1899,7 @@ mod tests {
         assert_eq!(r.ten, 7700);
         assert_eq!(
             r.yaku,
-            vec![(Yaku::Junchan as i32, 3), (Yaku::Pinfu as i32, 1),]
+            vec![(Yaku::Junchan as i8, 3), (Yaku::Pinfu as i8, 1),]
         );
         assert_eq!(r.yakuman, 0);
     }
@@ -1915,19 +1909,19 @@ mod tests {
         let res = calc_riichi(
             RiichiHand {
                 closed_part: vec![
-                    Tiles::S1 as i32,
-                    Tiles::S1 as i32,
-                    Tiles::S2 as i32,
-                    Tiles::S2 as i32,
-                    Tiles::S3 as i32,
-                    Tiles::S3 as i32,
-                    Tiles::S4 as i32,
-                    Tiles::S4 as i32,
-                    Tiles::S5 as i32,
-                    Tiles::S6 as i32,
-                    Tiles::S7 as i32,
-                    Tiles::S8 as i32,
-                    Tiles::S9 as i32,
+                    Tiles::S1 as i8,
+                    Tiles::S1 as i8,
+                    Tiles::S2 as i8,
+                    Tiles::S2 as i8,
+                    Tiles::S3 as i8,
+                    Tiles::S3 as i8,
+                    Tiles::S4 as i8,
+                    Tiles::S4 as i8,
+                    Tiles::S5 as i8,
+                    Tiles::S6 as i8,
+                    Tiles::S7 as i8,
+                    Tiles::S8 as i8,
+                    Tiles::S9 as i8,
                 ],
                 open_part: vec![],
             },
@@ -1939,9 +1933,9 @@ mod tests {
                 ippatsu: false,
                 double_riichi: false,
                 after_kan: false,
-                tile_discarded_by_someone: Tiles::S4 as i32,
-                bakaze: Tiles::E as i32,
-                jikaze: Tiles::W as i32,
+                tile_discarded_by_someone: Tiles::S4 as i8,
+                bakaze: Tiles::E as i8,
+                jikaze: Tiles::W as i8,
                 allow_aka: false,
                 allow_kuitan: true, // enable open tanyao
                 with_kiriage: false,
@@ -1963,10 +1957,10 @@ mod tests {
         assert_eq!(
             r.yaku,
             vec![
-                (Yaku::Chinitsu as i32, 6),
-                (Yaku::Ittsu as i32, 2),
-                (Yaku::Pinfu as i32, 1),
-                (Yaku::Iipeikou as i32, 1),
+                (Yaku::Chinitsu as i8, 6),
+                (Yaku::Ittsu as i8, 2),
+                (Yaku::Pinfu as i8, 1),
+                (Yaku::Iipeikou as i8, 1),
             ]
         );
         assert_eq!(r.yakuman, 0);
@@ -1977,23 +1971,23 @@ mod tests {
         let res = calc_riichi(
             RiichiHand {
                 closed_part: vec![
-                    Tiles::P4 as i32,
-                    Tiles::P4 as i32,
-                    Tiles::P4 as i32,
-                    Tiles::M1 as i32,
+                    Tiles::P4 as i8,
+                    Tiles::P4 as i8,
+                    Tiles::P4 as i8,
+                    Tiles::M1 as i8,
                 ],
                 open_part: vec![
                     (
                         true,
-                        vec![Tiles::M4 as i32, Tiles::M4 as i32, Tiles::M4 as i32],
+                        vec![Tiles::M4 as i8, Tiles::M4 as i8, Tiles::M4 as i8],
                     ),
                     (
                         true,
-                        vec![Tiles::S4 as i32, Tiles::S4 as i32, Tiles::S4 as i32],
+                        vec![Tiles::S4 as i8, Tiles::S4 as i8, Tiles::S4 as i8],
                     ),
                     (
                         true,
-                        vec![Tiles::M9 as i32, Tiles::M9 as i32, Tiles::M9 as i32],
+                        vec![Tiles::M9 as i8, Tiles::M9 as i8, Tiles::M9 as i8],
                     ),
                 ],
             },
@@ -2005,9 +1999,9 @@ mod tests {
                 ippatsu: false,
                 double_riichi: false,
                 after_kan: false,
-                tile_discarded_by_someone: Tiles::M1 as i32,
-                bakaze: Tiles::E as i32,
-                jikaze: Tiles::W as i32,
+                tile_discarded_by_someone: Tiles::M1 as i8,
+                bakaze: Tiles::E as i8,
+                jikaze: Tiles::W as i8,
                 allow_aka: false,
                 allow_kuitan: true, // enable open tanyao
                 with_kiriage: false,
@@ -2028,7 +2022,7 @@ mod tests {
         assert_eq!(r.ten, 8000);
         assert_eq!(
             r.yaku,
-            vec![(Yaku::Toitoi as i32, 2), (Yaku::SanshokuDoukou as i32, 2),]
+            vec![(Yaku::Toitoi as i8, 2), (Yaku::SanshokuDoukou as i8, 2),]
         );
         assert_eq!(r.yakuman, 0);
     }
@@ -2038,23 +2032,23 @@ mod tests {
         let res = calc_riichi(
             RiichiHand {
                 closed_part: vec![
-                    Tiles::P4 as i32,
-                    Tiles::P4 as i32,
-                    Tiles::P4 as i32,
-                    Tiles::M1 as i32,
+                    Tiles::P4 as i8,
+                    Tiles::P4 as i8,
+                    Tiles::P4 as i8,
+                    Tiles::M1 as i8,
                 ],
                 open_part: vec![
                     (
                         true,
-                        vec![Tiles::WD as i32, Tiles::WD as i32, Tiles::WD as i32],
+                        vec![Tiles::WD as i8, Tiles::WD as i8, Tiles::WD as i8],
                     ),
                     (
                         true,
-                        vec![Tiles::GD as i32, Tiles::GD as i32, Tiles::GD as i32],
+                        vec![Tiles::GD as i8, Tiles::GD as i8, Tiles::GD as i8],
                     ),
                     (
                         true,
-                        vec![Tiles::RD as i32, Tiles::RD as i32, Tiles::RD as i32],
+                        vec![Tiles::RD as i8, Tiles::RD as i8, Tiles::RD as i8],
                     ),
                 ],
             },
@@ -2066,9 +2060,9 @@ mod tests {
                 ippatsu: false,
                 double_riichi: false,
                 after_kan: false,
-                tile_discarded_by_someone: Tiles::M1 as i32,
-                bakaze: Tiles::E as i32,
-                jikaze: Tiles::W as i32,
+                tile_discarded_by_someone: Tiles::M1 as i8,
+                bakaze: Tiles::E as i8,
+                jikaze: Tiles::W as i8,
                 allow_aka: false,
                 allow_kuitan: true, // enable open tanyao
                 with_kiriage: false,
@@ -2087,7 +2081,7 @@ mod tests {
         assert_eq!(r.han, 0);
         assert_eq!(r.is_agari, true);
         assert_eq!(r.ten, 32000);
-        assert_eq!(r.yaku, vec![(Yaku::Daisangen as i32, 13),]);
+        assert_eq!(r.yaku, vec![(Yaku::Daisangen as i8, 13),]);
         assert_eq!(r.yakuman, 1);
     }
 
@@ -2096,20 +2090,20 @@ mod tests {
         let res = calc_riichi(
             RiichiHand {
                 closed_part: vec![
-                    Tiles::M4 as i32,
-                    Tiles::M5 as i32,
-                    Tiles::M6 as i32,
-                    Tiles::P3 as i32,
-                    Tiles::P4 as i32,
-                    Tiles::P5 as i32,
-                    Tiles::P7 as i32,
-                    Tiles::P8 as i32,
-                    Tiles::P9 as i32,
-                    Tiles::S5 as i32,
-                    Tiles::S5 as i32,
-                    Tiles::S7 as i32,
-                    Tiles::S8 as i32,
-                    Tiles::S6 as i32,
+                    Tiles::M4 as i8,
+                    Tiles::M5 as i8,
+                    Tiles::M6 as i8,
+                    Tiles::P3 as i8,
+                    Tiles::P4 as i8,
+                    Tiles::P5 as i8,
+                    Tiles::P7 as i8,
+                    Tiles::P8 as i8,
+                    Tiles::P9 as i8,
+                    Tiles::S5 as i8,
+                    Tiles::S5 as i8,
+                    Tiles::S7 as i8,
+                    Tiles::S8 as i8,
+                    Tiles::S6 as i8,
                 ],
                 open_part: vec![],
             },
@@ -2122,8 +2116,8 @@ mod tests {
                 double_riichi: false,
                 after_kan: false,
                 tile_discarded_by_someone: -1,
-                bakaze: Tiles::E as i32,
-                jikaze: Tiles::W as i32,
+                bakaze: Tiles::E as i8,
+                jikaze: Tiles::W as i8,
                 allow_aka: false,
                 allow_kuitan: false,
                 with_kiriage: false,
@@ -2145,7 +2139,7 @@ mod tests {
         assert_eq!(r.outgoing_ten.unwrap(), (700, 400));
         assert_eq!(
             r.yaku,
-            vec![(Yaku::Pinfu as i32, 1), (Yaku::Menzentsumo as i32, 1),]
+            vec![(Yaku::Pinfu as i8, 1), (Yaku::Menzentsumo as i8, 1),]
         );
         assert_eq!(r.yakuman, 0);
     }
@@ -2155,34 +2149,34 @@ mod tests {
         let res = calc_riichi(
             RiichiHand {
                 closed_part: vec![
-                    Tiles::P1 as i32,
-                    Tiles::P2 as i32,
-                    Tiles::P3 as i32,
-                    Tiles::P4 as i32,
-                    Tiles::P5 as i32,
-                    Tiles::P6 as i32,
-                    Tiles::P7 as i32,
-                    Tiles::P8 as i32,
-                    Tiles::P9 as i32,
-                    Tiles::S5 as i32,
-                    Tiles::S5 as i32,
+                    Tiles::P1 as i8,
+                    Tiles::P2 as i8,
+                    Tiles::P3 as i8,
+                    Tiles::P4 as i8,
+                    Tiles::P5 as i8,
+                    Tiles::P6 as i8,
+                    Tiles::P7 as i8,
+                    Tiles::P8 as i8,
+                    Tiles::P9 as i8,
+                    Tiles::S5 as i8,
+                    Tiles::S5 as i8,
                 ],
                 open_part: vec![(
                     false,
                     vec![
-                        Tiles::M1 as i32,
-                        Tiles::M1 as i32,
-                        Tiles::M1 as i32,
-                        Tiles::M1 as i32,
+                        Tiles::M1 as i8,
+                        Tiles::M1 as i8,
+                        Tiles::M1 as i8,
+                        Tiles::M1 as i8,
                     ],
                 )],
             },
             &mut RiichiOptions {
                 dora: vec![
-                    Tiles::S5 as i32,
-                    Tiles::M1 as i32,
-                    Tiles::S3 as i32,
-                    Tiles::M1 as i32,
+                    Tiles::S5 as i8,
+                    Tiles::M1 as i8,
+                    Tiles::S3 as i8,
+                    Tiles::M1 as i8,
                 ],
                 aka_count: 0,
                 first_take: false,
@@ -2191,8 +2185,8 @@ mod tests {
                 double_riichi: true,
                 after_kan: false,
                 tile_discarded_by_someone: -1,
-                bakaze: Tiles::S as i32,
-                jikaze: Tiles::E as i32,
+                bakaze: Tiles::S as i8,
+                jikaze: Tiles::E as i8,
                 allow_aka: false,
                 allow_kuitan: false,
                 with_kiriage: false,
@@ -2214,10 +2208,10 @@ mod tests {
         assert_eq!(
             r.yaku,
             vec![
-                (Yaku::DaburuRiichi as i32, 2),
-                (Yaku::Ittsu as i32, 2),
-                (Yaku::Menzentsumo as i32, 1),
-                (Yaku::Dora as i32, 10),
+                (Yaku::DaburuRiichi as i8, 2),
+                (Yaku::Ittsu as i8, 2),
+                (Yaku::Menzentsumo as i8, 1),
+                (Yaku::Dora as i8, 10),
             ]
         );
         assert_eq!(r.yakuman, 0);
@@ -2228,33 +2222,33 @@ mod tests {
         let res = calc_riichi(
             RiichiHand {
                 closed_part: vec![
-                    Tiles::P1 as i32,
-                    Tiles::P1 as i32,
-                    Tiles::P2 as i32,
-                    Tiles::P2 as i32,
-                    Tiles::P3 as i32,
-                    Tiles::P4 as i32,
-                    Tiles::P5 as i32,
-                    Tiles::P6 as i32,
-                    Tiles::P7 as i32,
-                    Tiles::P8 as i32,
-                    Tiles::P9 as i32,
-                    Tiles::P9 as i32,
-                    Tiles::P9 as i32,
+                    Tiles::P1 as i8,
+                    Tiles::P1 as i8,
+                    Tiles::P2 as i8,
+                    Tiles::P2 as i8,
+                    Tiles::P3 as i8,
+                    Tiles::P4 as i8,
+                    Tiles::P5 as i8,
+                    Tiles::P6 as i8,
+                    Tiles::P7 as i8,
+                    Tiles::P8 as i8,
+                    Tiles::P9 as i8,
+                    Tiles::P9 as i8,
+                    Tiles::P9 as i8,
                 ],
                 open_part: vec![],
             },
             &mut RiichiOptions {
-                dora: vec![Tiles::S8 as i32, Tiles::M5 as i32],
+                dora: vec![Tiles::S8 as i8, Tiles::M5 as i8],
                 aka_count: 0,
                 first_take: false,
                 riichi: false,
                 ippatsu: false,
                 double_riichi: false,
                 after_kan: false,
-                tile_discarded_by_someone: Tiles::P1 as i32,
-                bakaze: Tiles::E as i32,
-                jikaze: Tiles::S as i32,
+                tile_discarded_by_someone: Tiles::P1 as i8,
+                bakaze: Tiles::E as i8,
+                jikaze: Tiles::S as i8,
                 allow_aka: true,
                 allow_kuitan: true,
                 with_kiriage: false,
@@ -2273,7 +2267,7 @@ mod tests {
         assert_eq!(r.han, 0);
         assert_eq!(r.is_agari, true);
         assert_eq!(r.ten, 32000);
-        assert_eq!(r.yaku, vec![(Yaku::Chuurenpoto as i32, 13),]);
+        assert_eq!(r.yaku, vec![(Yaku::Chuurenpoto as i8, 13),]);
         assert_eq!(r.yakuman, 1);
     }
 }
