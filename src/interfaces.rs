@@ -15,7 +15,7 @@ pub struct RiichiOptions {
     pub riichi: bool,
     pub ippatsu: bool,
     pub double_riichi: bool,
-    pub last_take: bool,                // haitei/houtei
+    pub last_tile: bool,                // haitei/houtei
     pub after_kan: bool,                // chankan/rinshan
     pub tile_discarded_by_someone: i32, // -1 if tsumo
     pub bakaze: i32,
@@ -28,7 +28,6 @@ pub struct RiichiOptions {
     pub all_local_yaku_enabled: bool,
     pub allow_double_yakuman: bool,
     pub taken_tile: i32,
-    pub last_tile: bool,
 }
 
 #[derive(Serialize, Deserialize)]
