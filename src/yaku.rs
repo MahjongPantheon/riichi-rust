@@ -3,6 +3,7 @@ use crate::constants::{
     CHI_START, GREENS, HONORS, SIMPLE_TILES, Suit, TERMINALS, TERMINALS_AND_HONORS, Tiles, WINDS,
     is19, slice_by_suit, sum,
 };
+use std::collections::HashSet;
 
 pub struct YakuCheckInput<'t> {
     pub(crate) haipai: &'t Vec<i32>,
@@ -301,18 +302,27 @@ fn yaku_check_ryanpeikou(i: &YakuCheckInput) -> bool {
         return false;
     }
 
-    let mut digests: Vec<i64> = Vec::new();
+    let mut set: HashSet<i64> = HashSet::new();
+    let mut shuntsu_pairs_count = 0;
+    let mut shuntsu_count = 0;
+
     for v in i.current_pattern {
+        let dig = digest_simple(v);
         if v.len() >= 3 && v[0] == v[1] {
             return false;
         }
         if v.len() == 3 {
-            digests.push(digest_simple(v));
+            shuntsu_count += 1;
+            if set.contains(&dig) {
+                shuntsu_pairs_count += 1;
+                set.remove(&dig);
+            } else {
+                set.insert(dig);
+            }
         }
     }
 
-    // Imply that every chi occurs twice, so double XORing them over each other gives 0
-    digests.len() == 4 && digests.iter().fold(0, |acc, v| acc ^ v) == 0
+    shuntsu_count == 4 && shuntsu_pairs_count == 2
 }
 
 fn yaku_check_junchan(i: &YakuCheckInput) -> bool {
