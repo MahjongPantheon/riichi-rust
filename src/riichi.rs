@@ -1117,66 +1117,6 @@ mod tests {
     }
 
     #[test]
-    pub fn debug_1_should_parse_tsumo_pinfu() {
-        let res = calc_riichi(
-            RiichiHand {
-                closed_part: vec![
-                    Tiles::M4 as i32,
-                    Tiles::M5 as i32,
-                    Tiles::M6 as i32,
-                    Tiles::P3 as i32,
-                    Tiles::P4 as i32,
-                    Tiles::P5 as i32,
-                    Tiles::P7 as i32,
-                    Tiles::P8 as i32,
-                    Tiles::P9 as i32,
-                    Tiles::S5 as i32,
-                    Tiles::S5 as i32,
-                    Tiles::S7 as i32,
-                    Tiles::S8 as i32,
-                    Tiles::S6 as i32,
-                ],
-                open_part: vec![],
-            },
-            &RiichiOptions {
-                dora: vec![],
-                aka_count: 0,
-                first_take: false,
-                riichi: false,
-                ippatsu: false,
-                double_riichi: false,
-                after_kan: false,
-                tile_discarded_by_someone: -1,
-                bakaze: Tiles::E as i32,
-                jikaze: Tiles::W as i32,
-                allow_aka: false,
-                allow_kuitan: false,
-                with_kiriage: false,
-                disabled_yaku: vec![],
-                local_yaku_enabled: vec![],
-                all_local_yaku_enabled: false,
-                allow_double_yakuman: false,
-                taken_tile: -1,
-                last_tile: false,
-            },
-            false,
-        );
-
-        assert!(!res.is_err());
-        let r = res.unwrap();
-        assert_eq!(r.fu, 20);
-        assert_eq!(r.han, 2);
-        assert_eq!(r.is_agari, true);
-        assert_eq!(r.ten, 1500);
-        assert_eq!(r.outgoing_ten.unwrap(), (700, 400));
-        assert_eq!(
-            r.yaku,
-            vec![(Yaku::Pinfu as i32, 1), (Yaku::Menzentsumo as i32, 1),]
-        );
-        assert_eq!(r.yakuman, 0);
-    }
-
-    #[test]
     pub fn should_parse_ryanpeiko_tanyao_pinfu() {
         let res = calc_riichi(
             RiichiHand {
@@ -2187,5 +2127,139 @@ mod tests {
         assert_eq!(r.ten, 32000);
         assert_eq!(r.yaku, vec![(Yaku::Daisangen as i32, 13),]);
         assert_eq!(r.yakuman, 1);
+    }
+
+    #[test]
+    pub fn debug_1_should_parse_tsumo_pinfu() {
+        let res = calc_riichi(
+            RiichiHand {
+                closed_part: vec![
+                    Tiles::M4 as i32,
+                    Tiles::M5 as i32,
+                    Tiles::M6 as i32,
+                    Tiles::P3 as i32,
+                    Tiles::P4 as i32,
+                    Tiles::P5 as i32,
+                    Tiles::P7 as i32,
+                    Tiles::P8 as i32,
+                    Tiles::P9 as i32,
+                    Tiles::S5 as i32,
+                    Tiles::S5 as i32,
+                    Tiles::S7 as i32,
+                    Tiles::S8 as i32,
+                    Tiles::S6 as i32,
+                ],
+                open_part: vec![],
+            },
+            &RiichiOptions {
+                dora: vec![],
+                aka_count: 0,
+                first_take: false,
+                riichi: false,
+                ippatsu: false,
+                double_riichi: false,
+                after_kan: false,
+                tile_discarded_by_someone: -1,
+                bakaze: Tiles::E as i32,
+                jikaze: Tiles::W as i32,
+                allow_aka: false,
+                allow_kuitan: false,
+                with_kiriage: false,
+                disabled_yaku: vec![],
+                local_yaku_enabled: vec![],
+                all_local_yaku_enabled: false,
+                allow_double_yakuman: false,
+                taken_tile: -1,
+                last_tile: false,
+            },
+            false,
+        );
+
+        assert!(!res.is_err());
+        let r = res.unwrap();
+        assert_eq!(r.fu, 20);
+        assert_eq!(r.han, 2);
+        assert_eq!(r.is_agari, true);
+        assert_eq!(r.ten, 1500);
+        assert_eq!(r.outgoing_ten.unwrap(), (700, 400));
+        assert_eq!(
+            r.yaku,
+            vec![(Yaku::Pinfu as i32, 1), (Yaku::Menzentsumo as i32, 1),]
+        );
+        assert_eq!(r.yakuman, 0);
+    }
+
+    #[test]
+    pub fn debug_1_should_parse_double_riichi_tsumo_ittsu_10dora() {
+        let res = calc_riichi(
+            RiichiHand {
+                closed_part: vec![
+                    Tiles::P1 as i32,
+                    Tiles::P2 as i32,
+                    Tiles::P3 as i32,
+                    Tiles::P4 as i32,
+                    Tiles::P5 as i32,
+                    Tiles::P6 as i32,
+                    Tiles::P7 as i32,
+                    Tiles::P8 as i32,
+                    Tiles::P9 as i32,
+                    Tiles::S5 as i32,
+                    Tiles::S5 as i32,
+                ],
+                open_part: vec![(
+                    false,
+                    vec![
+                        Tiles::M1 as i32,
+                        Tiles::M1 as i32,
+                        Tiles::M1 as i32,
+                        Tiles::M1 as i32,
+                    ],
+                )],
+            },
+            &RiichiOptions {
+                dora: vec![
+                    Tiles::S5 as i32,
+                    Tiles::M1 as i32,
+                    Tiles::S3 as i32,
+                    Tiles::M1 as i32,
+                ],
+                aka_count: 0,
+                first_take: false,
+                riichi: false,
+                ippatsu: false,
+                double_riichi: true,
+                after_kan: false,
+                tile_discarded_by_someone: -1,
+                bakaze: Tiles::S as i32,
+                jikaze: Tiles::E as i32,
+                allow_aka: false,
+                allow_kuitan: false,
+                with_kiriage: false,
+                disabled_yaku: vec![],
+                local_yaku_enabled: vec![],
+                all_local_yaku_enabled: false,
+                allow_double_yakuman: false,
+                taken_tile: -1,
+                last_tile: false,
+            },
+            false,
+        );
+
+        assert!(!res.is_err());
+        let r = res.unwrap();
+        assert_eq!(r.fu, 60);
+        assert_eq!(r.han, 15);
+        assert_eq!(r.is_agari, true);
+        assert_eq!(r.ten, 48000);
+        assert_eq!(
+            r.yaku,
+            vec![
+                (Yaku::DaburuRiichi as i32, 2),
+                (Yaku::Ittsu as i32, 2),
+                (Yaku::Menzentsumo as i32, 1),
+                (Yaku::Dora as i32, 10),
+            ]
+        );
+        assert_eq!(r.yakuman, 0);
     }
 }

@@ -426,8 +426,16 @@ fn yaku_check_chiitoitsu(i: &YakuCheckInput) -> bool {
     check7(i.haipai34) && !yaku_check_ryanpeikou(i)
 }
 
+// Note: order of double riichi should be checked externally;
+// We assume that closed kan is done after riichi.
 fn yaku_check_daburu_riichi(i: &YakuCheckInput) -> bool {
-    i.double_riichi && i.furo.len() == 0
+    i.double_riichi
+        && i.furo
+            .iter()
+            .filter(|m| m[0] > 0)
+            .collect::<Vec<&Vec<i32>>>()
+            .len()
+            == 0
 }
 
 fn yaku_check_ittsu(i: &YakuCheckInput) -> bool {
