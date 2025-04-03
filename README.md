@@ -2,6 +2,8 @@
 
 Small library to calculate hands and yaku for japanese (riichi) mahjong.
 
+For WebAssembly sources and builds, see the [repo](https://github.com/MahjongPantheon/riichi-rs) and npm packages for [node](https://npmjs.com/package/riichi-rs-node) and [bundlers](https://npmjs.com/package/riichi-rs-bundlers).
+
 ### Usage
 
 Install the library by adding the following in your Cargo.toml:
