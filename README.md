@@ -82,6 +82,25 @@ pub fn main() {
 }
 ```
 
+### Performance and benchmarks
+
+Performance testing setup:
+- Comparing `riichi-ts` library (Typescript-only) and `riichi-rust` library compiled to WebAssembly.
+  - See code and details [here](https://github.com/MahjongPantheon/riichi-ts/blob/main/riichi_realdata_rs.test.ts) and [here](https://github.com/MahjongPantheon/riichi-ts/blob/main/riichi_realdata.test.ts).
+- Both tests use same logs archive containing 300k+ game logs with 1.5M+ hands. Archive size: 1.9GB.
+- Both tests were single-threaded.
+- CPU: Intel Core i7-11700 desktop
+- Test runner: Jest
+- We executed third run without any calculations to subtract time required for archive processing and data preparation.
+
+| Examined code | Time to complete, sec | Calculation time, sec | Speedup | Failures |
+| ------------- | --------------------- | --------------------- | ------- | -------- |
+| Jest tests without calculation | 71 | 0* | - | - |
+| Jest tests using riichi-ts | 600 | 529 | - | 0 |
+| Jest tests using riichi-rust | 120 | 49 | 1079% | 0 |
+
+As we can see, WebAssembly version shows performance increase around 10x, and we may expect even better performance with native code target (this was not measured though).
+
 ### Credits
 
 Inspired by and partially taken from following repositories:
