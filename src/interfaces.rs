@@ -45,5 +45,4 @@ pub struct RiichiResult {
     pub outgoing_ten: Option<(i32, i32)>, // (oya, ko) points or nothing
     pub yaku: Vec<(i8, i8)>,              // (yaku_id, han_count)
     pub hairi: Option<HairiResult>,
-    pub hairi7and13: Option<HairiResult>,
 }

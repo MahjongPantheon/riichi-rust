@@ -1,282 +1,373 @@
-use crate::constants::{kokushi_idx, sum};
+use crate::constants::sum;
 use crate::interfaces::HairiResult;
-use std::cmp::min;
 
-pub fn shanten13(haipai: &Vec<i8>) -> i8 {
-    let cnt = sum(&haipai);
-    if cnt < 13 || cnt > 14 {
-        return -1; // wrong count
-    }
+// Ported from https://github.com/MahjongRepository/mahjong/blob/master/mahjong/shanten.py
+// Implements tenhou.net logic for shanten calculation; hairi calculation taken from https://github.com/takayama-lily/riichi
 
-    let mut singles = 0;
-    let mut at_least_one_pair = 0;
+const AGARI_STATE: i8 = -1;
+const HONOR_INDICES: &[usize] = &[27, 28, 29, 30, 31, 32, 33];
+const TERMINAL_INDICES: &[usize] = &[0, 8, 9, 17, 18, 26];
 
-    for i in kokushi_idx() {
-        if haipai[i.clone() as usize - 1] >= 1 {
-            singles += 1;
-        }
-        if haipai[i.clone() as usize - 1] > 1 {
-            at_least_one_pair = 1;
-        }
-    }
-
-    13 - singles - at_least_one_pair
+struct Shanten {
+    tiles: Vec<i8>,
+    number_melds: i8,
+    number_tatsu: i8,
+    number_pairs: i8,
+    number_jidahai: i8,
+    number_characters: i32,
+    number_isolated_tiles: i32,
+    min_shanten: i8,
 }
 
-pub fn shanten7(haipai: &Vec<i8>) -> i8 {
-    let cnt = sum(&haipai);
-    if cnt < 13 || cnt > 14 {
-        return -1; // wrong count
-    }
-
-    let mut pairs = 0;
-    let mut singles = 0;
-
-    for i in 0..34 {
-        if haipai[i.clone() as usize] >= 2 {
-            pairs += 1;
-        }
-        if haipai[i.clone() as usize] == 1 {
-            singles += 1;
+impl Shanten {
+    fn new() -> Self {
+        Shanten {
+            tiles: Vec::new(),
+            number_melds: 0,
+            number_tatsu: 0,
+            number_pairs: 0,
+            number_jidahai: 0,
+            number_characters: 0,
+            number_isolated_tiles: 0,
+            min_shanten: 8,
         }
     }
 
-    if pairs + singles >= 7 {
-        6 - pairs
-    } else {
-        6 - pairs + (7 - pairs - singles)
+    fn calculate_shanten(
+        &mut self,
+        tiles_34: &[i8],
+        use_chiitoitsu: bool,
+        use_kokushi: bool,
+    ) -> i8 {
+        let mut shanten_results = vec![self.calculate_shanten_for_regular_hand(&tiles_34.to_vec())];
+
+        if use_chiitoitsu {
+            shanten_results.push(self.calculate_shanten_for_chiitoitsu_hand(tiles_34));
+        }
+        if use_kokushi {
+            shanten_results.push(self.calculate_shanten_for_kokushi_hand(tiles_34));
+        }
+
+        *shanten_results.iter().min().unwrap()
+    }
+
+    fn calculate_shanten_for_chiitoitsu_hand(&self, tiles_34: &[i8]) -> i8 {
+        let pairs = tiles_34.iter().filter(|&&x| x >= 2).count();
+        if pairs == 7 {
+            return AGARI_STATE;
+        }
+
+        let kinds = tiles_34.iter().filter(|&&x| x >= 1).count();
+        6 - (pairs as i8) + if kinds < 7 { 7 - (kinds as i8) } else { 0 }
+    }
+
+    fn calculate_shanten_for_kokushi_hand(&self, tiles_34: &[i8]) -> i8 {
+        let indices: Vec<usize> = TERMINAL_INDICES
+            .iter()
+            .chain(HONOR_INDICES.iter())
+            .cloned()
+            .collect();
+
+        let completed_terminals = indices.iter().filter(|&&i| tiles_34[i] >= 2).count();
+
+        let terminals = indices.iter().filter(|&&i| tiles_34[i] != 0).count();
+
+        13 - (terminals as i8) - if completed_terminals > 0 { 1 } else { 0 }
+    }
+
+    fn calculate_shanten_for_regular_hand(&mut self, tiles_34: &[i8]) -> i8 {
+        let tiles = tiles_34.to_vec();
+        self.init(&tiles);
+
+        let count_of_tiles: i8 = tiles.iter().sum();
+        assert!(count_of_tiles <= 14, "Too many tiles = {}", count_of_tiles);
+
+        self.remove_character_tiles(count_of_tiles);
+
+        let init_mentsu = (14 - count_of_tiles) / 3;
+        self.scan(init_mentsu);
+
+        self.min_shanten
+    }
+
+    fn init(&mut self, tiles: &[i8]) {
+        self.tiles = tiles.to_vec();
+        self.number_melds = 0;
+        self.number_tatsu = 0;
+        self.number_pairs = 0;
+        self.number_jidahai = 0;
+        self.number_characters = 0;
+        self.number_isolated_tiles = 0;
+        self.min_shanten = 8;
+    }
+
+    fn scan(&mut self, init_mentsu: i8) {
+        for i in 0..27 {
+            if self.tiles[i] == 4 {
+                self.number_characters |= 1 << i;
+            }
+        }
+        self.number_melds += init_mentsu;
+        self.run(0);
+    }
+
+    fn run(&mut self, mut depth: usize) {
+        if self.min_shanten == AGARI_STATE {
+            return;
+        }
+
+        while depth < 27 && self.tiles[depth] == 0 {
+            depth += 1;
+        }
+
+        if depth >= 27 {
+            self.update_result();
+            return;
+        }
+
+        let mut i = depth;
+        if i > 8 {
+            i -= 9;
+        }
+        if i > 8 {
+            i -= 9;
+        }
+
+        match self.tiles[depth] {
+            4 => {
+                self.increase_set(depth);
+                if i < 7 && self.tiles[depth + 2] != 0 {
+                    if self.tiles[depth + 1] != 0 {
+                        self.increase_shuntsu(depth);
+                        self.run(depth + 1);
+                        self.decrease_shuntsu(depth);
+                    }
+                    self.increase_tatsu_second(depth);
+                    self.run(depth + 1);
+                    self.decrease_tatsu_second(depth);
+                }
+
+                if i < 8 && self.tiles[depth + 1] != 0 {
+                    self.increase_tatsu_first(depth);
+                    self.run(depth + 1);
+                    self.decrease_tatsu_first(depth);
+                }
+
+                self.increase_isolated_tile(depth);
+                self.run(depth + 1);
+                self.decrease_isolated_tile(depth);
+                self.decrease_set(depth);
+                self.increase_pair(depth);
+
+                // Continue with a similar pattern...
+                self.decrease_pair(depth);
+            }
+            3 => {
+                self.increase_set(depth);
+                self.run(depth + 1);
+                self.decrease_set(depth);
+                self.increase_pair(depth);
+
+                if i < 7 && self.tiles[depth + 1] != 0 && self.tiles[depth + 2] != 0 {
+                    self.increase_shuntsu(depth);
+                    self.run(depth + 1);
+                    self.decrease_shuntsu(depth);
+                } else {
+                    if i < 7 && self.tiles[depth + 2] != 0 {
+                        self.increase_tatsu_second(depth);
+                        self.run(depth + 1);
+                        self.decrease_tatsu_second(depth);
+                    }
+
+                    if i < 8 && self.tiles[depth + 1] != 0 {
+                        self.increase_tatsu_first(depth);
+                        self.run(depth + 1);
+                        self.decrease_tatsu_first(depth);
+                    }
+                }
+
+                self.decrease_pair(depth);
+            }
+            2 => {
+                self.increase_pair(depth);
+                self.run(depth + 1);
+                self.decrease_pair(depth);
+
+                if i < 7 && self.tiles[depth + 2] != 0 && self.tiles[depth + 1] != 0 {
+                    self.increase_shuntsu(depth);
+                    self.run(depth);
+                    self.decrease_shuntsu(depth);
+                }
+            }
+            1 => {
+                if i < 6
+                    && self.tiles[depth + 1] == 1
+                    && self.tiles[depth + 2] != 0
+                    && self.tiles[depth + 3] != 4
+                {
+                    self.increase_shuntsu(depth);
+                    self.run(depth + 2);
+                    self.decrease_shuntsu(depth);
+                } else {
+                    self.increase_isolated_tile(depth);
+                    self.run(depth + 1);
+                    self.decrease_isolated_tile(depth);
+
+                    if i < 7 && self.tiles[depth + 2] != 0 {
+                        if self.tiles[depth + 1] != 0 {
+                            self.increase_shuntsu(depth);
+                            self.run(depth + 1);
+                            self.decrease_shuntsu(depth);
+                        }
+                        self.increase_tatsu_second(depth);
+                        self.run(depth + 1);
+                        self.decrease_tatsu_second(depth);
+                    }
+
+                    if i < 8 && self.tiles[depth + 1] != 0 {
+                        self.increase_tatsu_first(depth);
+                        self.run(depth + 1);
+                        self.decrease_tatsu_first(depth);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn update_result(&mut self) {
+        let mut ret_shanten = 8 - self.number_melds * 2 - self.number_tatsu - self.number_pairs;
+        let mut n_mentsu_kouho = self.number_melds + self.number_tatsu;
+
+        if self.number_pairs > 0 {
+            n_mentsu_kouho += self.number_pairs - 1;
+        } else if self.number_characters != 0 && self.number_isolated_tiles != 0 {
+            if (self.number_characters | self.number_isolated_tiles) == self.number_characters {
+                ret_shanten += 1;
+            }
+        }
+
+        if n_mentsu_kouho > 4 {
+            ret_shanten += n_mentsu_kouho - 4;
+        }
+
+        if ret_shanten != AGARI_STATE && ret_shanten < self.number_jidahai {
+            ret_shanten = self.number_jidahai;
+        }
+
+        if ret_shanten < self.min_shanten {
+            self.min_shanten = ret_shanten;
+        }
+    }
+
+    // Helper methods for tile manipulation
+    fn increase_set(&mut self, k: usize) {
+        self.tiles[k] -= 3;
+        self.number_melds += 1;
+    }
+
+    fn decrease_set(&mut self, k: usize) {
+        self.tiles[k] += 3;
+        self.number_melds -= 1;
+    }
+
+    fn increase_pair(&mut self, k: usize) {
+        self.tiles[k] -= 2;
+        self.number_pairs += 1;
+    }
+
+    fn decrease_pair(&mut self, k: usize) {
+        self.tiles[k] += 2;
+        self.number_pairs -= 1;
+    }
+
+    fn increase_shuntsu(&mut self, k: usize) {
+        self.tiles[k] -= 1;
+        self.tiles[k + 1] -= 1;
+        self.tiles[k + 2] -= 1;
+        self.number_melds += 1;
+    }
+
+    fn decrease_shuntsu(&mut self, k: usize) {
+        self.tiles[k] += 1;
+        self.tiles[k + 1] += 1;
+        self.tiles[k + 2] += 1;
+        self.number_melds -= 1;
+    }
+
+    fn increase_tatsu_first(&mut self, k: usize) {
+        self.tiles[k] -= 1;
+        self.tiles[k + 1] -= 1;
+        self.number_tatsu += 1;
+    }
+
+    fn decrease_tatsu_first(&mut self, k: usize) {
+        self.tiles[k] += 1;
+        self.tiles[k + 1] += 1;
+        self.number_tatsu -= 1;
+    }
+
+    fn increase_tatsu_second(&mut self, k: usize) {
+        self.tiles[k] -= 1;
+        self.tiles[k + 2] -= 1;
+        self.number_tatsu += 1;
+    }
+
+    fn decrease_tatsu_second(&mut self, k: usize) {
+        self.tiles[k] += 1;
+        self.tiles[k + 2] += 1;
+        self.number_tatsu -= 1;
+    }
+
+    fn increase_isolated_tile(&mut self, k: usize) {
+        self.tiles[k] -= 1;
+        self.number_isolated_tiles |= 1 << k;
+    }
+
+    fn decrease_isolated_tile(&mut self, k: usize) {
+        self.tiles[k] += 1;
+        self.number_isolated_tiles &= !(1 << k);
+    }
+
+    fn remove_character_tiles(&mut self, nc: i8) {
+        let mut number = 0;
+        let mut isolated = 0;
+
+        for i in 27..34 {
+            match self.tiles[i] {
+                4 => {
+                    self.number_melds += 1;
+                    self.number_jidahai += 1;
+                    number |= 1 << (i - 27);
+                    isolated |= 1 << (i - 27);
+                }
+                3 => self.number_melds += 1,
+                2 => self.number_pairs += 1,
+                1 => isolated |= 1 << (i - 27),
+                _ => {}
+            }
+        }
+
+        if self.number_jidahai > 0 && (nc % 3) == 2 {
+            self.number_jidahai -= 1;
+        }
+
+        if isolated != 0 {
+            self.number_isolated_tiles |= 1 << 27;
+            if (number | isolated) == number {
+                self.number_characters |= 1 << 27;
+            }
+        }
     }
 }
 
-fn search_helper(
-    hand_part: &mut Vec<i8>,
-    index: i8,
-    is_jihai: bool,
-    mentsu: i8,
-    tatsu: i8,
-    singles: i8,
-) -> (i8, i8, i8) {
-    let mut tmp: (i8, i8, i8);
-    let mut max = (mentsu, tatsu, singles);
-
-    if index == (if is_jihai { 7 } else { 9 }) {
-        return max;
-    }
-
-    if hand_part[index as usize] == 0 {
-        tmp = search_helper(hand_part, index + 1, is_jihai, mentsu, tatsu, singles);
-        if tmp > max {
-            max = tmp;
-        }
-    }
-
-    if hand_part[index as usize] >= 3 {
-        hand_part[index as usize] -= 3;
-        tmp = search_helper(hand_part, index, is_jihai, mentsu + 1, tatsu, singles);
-        if tmp > max {
-            max = tmp;
-        }
-        hand_part[index as usize] += 3;
-    }
-
-    if hand_part[index as usize] >= 2 {
-        hand_part[index as usize] -= 2;
-        tmp = search_helper(hand_part, index, is_jihai, mentsu, tatsu + 1, singles);
-        if tmp > max {
-            max = tmp;
-        }
-        hand_part[index as usize] += 2;
-    }
-
-    if hand_part[index as usize] >= 1 {
-        hand_part[index as usize] -= 1;
-        tmp = search_helper(hand_part, index, is_jihai, mentsu, tatsu, singles + 1);
-        if tmp > max {
-            max = tmp;
-        }
-        hand_part[index as usize] += 1;
-    }
-
-    if !is_jihai {
-        if hand_part[index as usize] > 0
-            && index + 1 < hand_part.len() as i8
-            && hand_part[(index + 1) as usize] > 0
-            && index + 2 < hand_part.len() as i8
-            && hand_part[(index + 2) as usize] > 0
-        {
-            hand_part[index as usize] -= 1;
-            hand_part[(index + 1) as usize] -= 1;
-            hand_part[(index + 2) as usize] -= 1;
-            tmp = search_helper(hand_part, index, is_jihai, mentsu + 1, tatsu, singles);
-            if tmp > max {
-                max = tmp;
-            }
-            hand_part[index as usize] += 1;
-            hand_part[(index + 1) as usize] += 1;
-            hand_part[(index + 2) as usize] += 1;
-        }
-
-        if hand_part[index as usize] > 0
-            && index + 2 < hand_part.len() as i8
-            && hand_part[(index + 2) as usize] > 0
-        {
-            hand_part[index as usize] -= 1;
-            hand_part[(index + 2) as usize] -= 1;
-            tmp = search_helper(hand_part, index, is_jihai, mentsu, tatsu + 1, singles);
-            if tmp > max {
-                max = tmp;
-            }
-            hand_part[index as usize] += 1;
-            hand_part[(index + 2) as usize] += 1;
-        }
-
-        if hand_part[index as usize] > 0
-            && index + 1 < hand_part.len() as i8
-            && hand_part[(index + 1) as usize] > 0
-        {
-            hand_part[index as usize] -= 1;
-            hand_part[(index + 1) as usize] -= 1;
-            tmp = search_helper(hand_part, index, is_jihai, mentsu, tatsu + 1, singles);
-            if tmp > max {
-                max = tmp;
-            }
-            hand_part[index as usize] += 1;
-            hand_part[(index + 1) as usize] += 1;
-        }
-    }
-
-    max
+pub fn calc_shanten(tiles_34: &[i8]) -> i8 {
+    let mut shanten = Shanten::new();
+    shanten.calculate_shanten(tiles_34, true, true)
 }
 
-pub fn shanten(haipai: &Vec<i8>) -> i8 {
-    let mut res = 9;
-    let mut mentsu = 0;
-    let mut tatsu = 0;
-    let mut singles = 0;
-    let mut furo: i8;
-
-    fn search(
-        arr: &mut Vec<i8>,
-        is_jihai: bool,
-        mentsu: i8,
-        tatsu: i8,
-        singles: i8,
-    ) -> (i8, i8, i8) {
-        let result = search_helper(arr, 0, is_jihai, 0, 0, 0);
-        (mentsu + result.0, tatsu + result.1, singles + result.2)
-    }
-
-    fn calc(
-        mentsu_in: i8,
-        tatsu_in: i8,
-        singles_in: i8,
-        furo_in: i8,
-        res_in: i8,
-    ) -> (i8, i8, i8, i8, i8) {
-        let mut tmp_res = -1;
-        let mut mentsu = mentsu_in;
-        let mut tatsu = tatsu_in;
-        let mut singles = singles_in;
-        let mut res = res_in;
-        let furo = furo_in;
-
-        while mentsu < 4 - furo {
-            if tatsu > 0 && singles > 0 {
-                tatsu -= 1;
-                singles -= 1;
-                mentsu += 1;
-                tmp_res += 1;
-                continue;
-            }
-
-            if tatsu > 0 && singles == 0 {
-                tatsu -= 1;
-                singles += 1;
-                mentsu += 1;
-                tmp_res += 1;
-                continue;
-            }
-
-            if tatsu == 0 && singles > 0 {
-                singles -= 2;
-                mentsu += 1;
-                tmp_res += 2;
-            }
-        }
-
-        if singles > 0 {
-            tmp_res += 1;
-        }
-
-        res = if tmp_res < res { tmp_res } else { res };
-        mentsu = 0;
-        tatsu = 0;
-        singles = 0;
-
-        (mentsu, tatsu, singles, furo, res)
-    }
-
-    let s = sum(&haipai);
-    if s > 14 || s % 3 == 0 {
-        return -1; // wrong count;
-    }
-
-    furo = ((14 - s) as f32 / 3.).round() as i8;
-    let mut tmp = haipai.clone();
-    let haipai_c: &mut Vec<i8> = tmp.as_mut();
-
-    // Add one non-existing phantom tile to make hand to be 14-tile
-    if s % 3 == 1 {
-        for i in (0..34).rev() {
-            if haipai_c[i] == 0 {
-                haipai_c[i] += 1;
-                break;
-            }
-        }
-    }
-
-    for i in 0..34 {
-        if haipai_c[i] == 0 {
-            continue;
-        }
-        let mut t = haipai_c.clone();
-        t[i] -= if haipai_c[i] >= 2 { 2 } else { haipai_c[i] };
-        let r1 = search(Vec::from(&t[0..9]).as_mut(), false, mentsu, tatsu, singles);
-        let r2 = search(Vec::from(&t[9..18]).as_mut(), false, mentsu, tatsu, singles);
-        let r3 = search(
-            Vec::from(&t[18..27]).as_mut(),
-            false,
-            mentsu,
-            tatsu,
-            singles,
-        );
-        let r4 = search(Vec::from(&t[27..34]).as_mut(), true, mentsu, tatsu, singles);
-        mentsu += r1.0 + r2.0 + r3.0 + r4.0;
-        tatsu += r1.1 + r2.1 + r3.1 + r4.1;
-        singles += r1.2 + r2.2 + r3.2 + r4.2;
-        let r5 = calc(mentsu, tatsu, singles, furo, res);
-        mentsu = r5.0;
-        tatsu = r5.1;
-        singles = r5.2;
-        furo = r5.3;
-        res = r5.4;
-    }
-
-    res
-}
-
-pub fn hairi(haipai: &mut Vec<i8>, is_7_or_13: bool) -> Option<HairiResult> {
-    let shanten_calc = |haipai: &mut Vec<i8>| {
-        if !is_7_or_13 {
-            shanten(haipai)
-        } else {
-            let sht7 = shanten7(haipai);
-            let sht13 = shanten13(haipai);
-            min(sht7, sht13)
-        }
-    };
-
-    let sht = shanten_calc(haipai);
+pub fn hairi(tiles_34: &mut Vec<i8>) -> Option<HairiResult> {
+    let sht = calc_shanten(tiles_34);
 
     let mut res: HairiResult = HairiResult {
         now: sht,
@@ -288,54 +379,38 @@ pub fn hairi(haipai: &mut Vec<i8>, is_7_or_13: bool) -> Option<HairiResult> {
         return None;
     }
 
-    let calc_hairi = |haipai: &mut Vec<i8>, current_index: i8| -> Vec<i8> {
+    let calc_hairi = |tiles_34: &mut Vec<i8>, current_index: i8| -> Vec<i8> {
         let mut waits: Vec<i8> = Vec::new();
         for i in 0..34 {
             if i == current_index {
                 continue;
             }
-            if !is_7_or_13 && i == 3 && haipai[i as usize] == 0 {
-                continue;
-            }
-            if !is_7_or_13
-                && i < 3
-                && haipai[i as usize] == 0
-                && i - 1 > 0
-                && haipai[(i - 1) as usize] != 0
-                && i - 2 > 0
-                && haipai[(i - 2) as usize] != 0
-                && ((i + 1) as usize) < haipai.len()
-                && haipai[(i + 1) as usize] != 0
-            {
-                continue;
-            }
-
-            haipai[i as usize] += 1;
-            if shanten_calc(haipai) < sht {
+            tiles_34[i as usize] += 1;
+            if calc_shanten(tiles_34) < sht {
                 waits.push(i);
             }
-            haipai[i as usize] -= 1;
+            tiles_34[i as usize] -= 1;
         }
         waits
     };
 
     // 13-tile hand: calculate hairi once and return waits
-    if sum(haipai) % 3 == 1 {
-        res.wait = calc_hairi(haipai, -1);
+    if sum(tiles_34) % 3 == 1 {
+        res.wait = calc_hairi(tiles_34, -1);
         return Option::from(res);
     }
 
     // 14-tile non-tempai hand: try to detect possible discards and waits after it
     let mut waits_after_discard: Vec<(i8, Vec<i8>)> = Vec::new();
     for i in 0..34 {
-        if haipai[i] == 0 {
+        if tiles_34[i] == 0 {
             continue;
         }
-        haipai[i] -= 1;
-        if shanten_calc(haipai) == sht {
-            waits_after_discard.push((i as i8, calc_hairi(haipai, i as i8)));
+        tiles_34[i] -= 1;
+        if calc_shanten(tiles_34) == sht {
+            waits_after_discard.push((i as i8, calc_hairi(tiles_34, i as i8)));
         }
-        haipai[i] += 1;
+        tiles_34[i] += 1;
     }
 
     res.waits_after_discard = waits_after_discard;
@@ -345,148 +420,12 @@ pub fn hairi(haipai: &mut Vec<i8>, is_7_or_13: bool) -> Option<HairiResult> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    pub fn shanten13_works() {
-        let hands = [
-            (
-                [
-                    1, 0, 0, 0, 0, 0, 0, 0, 1, //
-                    1, 0, 0, 0, 0, 0, 0, 0, 1, //
-                    1, 0, 0, 0, 0, 0, 0, 0, 1, //
-                    1, 1, 1, 1, 1, 1, 1,
-                ],
-                0,
-            ),
-            (
-                [
-                    1, 0, 0, 0, 0, 0, 0, 0, 0, //
-                    1, 0, 0, 0, 0, 0, 0, 0, 1, //
-                    1, 0, 0, 0, 0, 0, 0, 0, 1, //
-                    1, 1, 1, 2, 1, 1, 1,
-                ],
-                0,
-            ),
-            (
-                [
-                    1, 0, 0, 0, 0, 0, 0, 0, 0, //
-                    1, 0, 0, 0, 0, 0, 0, 0, 0, //
-                    1, 0, 0, 0, 0, 1, 0, 0, 1, //
-                    1, 1, 1, 1, 1, 1, 2,
-                ],
-                1,
-            ),
-            (
-                [
-                    1, 0, 0, 0, 0, 0, 0, 0, 1, //
-                    1, 0, 0, 0, 0, 0, 0, 0, 1, //
-                    0, 0, 0, 0, 0, 0, 0, 0, 1, //
-                    1, 2, 1, 1, 2, 1, 0,
-                ],
-                1,
-            ),
-            (
-                [
-                    1, 0, 0, 0, 0, 0, 0, 0, 0, //
-                    1, 0, 0, 0, 0, 0, 0, 0, 0, //
-                    1, 0, 0, 0, 0, 0, 0, 0, 1, //
-                    1, 1, 1, 1, 3, 1, 1,
-                ],
-                1,
-            ),
-            (
-                [
-                    1, 0, 0, 0, 0, 0, 0, 0, 0, //
-                    1, 0, 0, 0, 0, 0, 0, 0, 0, //
-                    1, 0, 0, 0, 0, 0, 1, 0, 1, //
-                    1, 1, 1, 1, 3, 1, 0,
-                ],
-                2,
-            ),
-            (
-                [
-                    1, 0, 0, 0, 0, 0, 0, 0, 0, //
-                    1, 0, 0, 0, 0, 0, 0, 0, 0, //
-                    0, 0, 0, 0, 0, 0, 0, 0, 1, //
-                    1, 1, 2, 2, 2, 1, 1,
-                ],
-                2,
-            ),
-        ];
-
-        hands.iter().for_each(|(h, s)| {
-            assert_eq!(shanten13(&Vec::from(h)), *s);
-        });
-    }
-
-    #[test]
-    pub fn shanten7_works() {
-        let hands = [
-            (
-                [
-                    0, 0, 2, 0, 0, 0, 0, 0, 0, //
-                    0, 0, 0, 0, 2, 0, 2, 0, 0, //
-                    1, 0, 0, 0, 0, 2, 0, 0, 0, //
-                    0, 0, 2, 0, 2, 0, 0,
-                ],
-                0,
-            ),
-            (
-                [
-                    2, 0, 0, 0, 2, 0, 0, 2, 0, //
-                    0, 0, 0, 0, 0, 0, 0, 0, 0, //
-                    0, 0, 0, 0, 2, 0, 0, 0, 1, //
-                    2, 2, 0, 0, 0, 0, 0,
-                ],
-                0,
-            ),
-            (
-                [
-                    0, 3, 0, 0, 0, 2, 0, 0, 0, //
-                    0, 2, 0, 0, 0, 2, 0, 0, 0, //
-                    0, 2, 0, 0, 0, 2, 0, 0, 0, //
-                    0, 0, 0, 0, 0, 0, 0,
-                ],
-                1,
-            ),
-            (
-                [
-                    0, 0, 1, 1, 1, 0, 0, 0, 0, //
-                    0, 0, 0, 0, 0, 0, 0, 0, 0, //
-                    0, 0, 2, 2, 2, 0, 0, 0, 0, //
-                    0, 0, 0, 0, 2, 2, 0,
-                ],
-                1,
-            ),
-            (
-                [
-                    0, 0, 1, 1, 1, 1, 0, 0, 0, //
-                    0, 0, 0, 0, 0, 0, 0, 0, 0, //
-                    0, 0, 0, 2, 0, 2, 1, 0, 0, //
-                    0, 0, 0, 2, 0, 2, 0,
-                ],
-                2,
-            ),
-            (
-                [
-                    0, 0, 4, 0, 0, 0, 0, 0, 0, //
-                    0, 0, 0, 0, 0, 0, 0, 0, 0, //
-                    0, 0, 0, 2, 2, 2, 0, 0, 0, //
-                    0, 0, 0, 2, 1, 0, 0,
-                ],
-                2,
-            ),
-        ];
-
-        hands.iter().for_each(|(h, s)| {
-            assert_eq!(shanten7(&Vec::from(h)), *s);
-        });
-    }
+    use crate::constants::Tiles::*;
 
     #[test]
     pub fn shanten_13tiles_works() {
         // Hand with 13 tiles but not tenpai
-        let res = shanten(&vec![
+        let res = calc_shanten(&vec![
             2, 2, 2, 0, 0, 0, 0, 0, 0, //
             0, 0, 0, 0, 1, 1, 1, 0, 0, //
             0, 1, 0, 0, 1, 2, 0, 0, 0, //
@@ -498,1007 +437,1007 @@ mod tests {
     #[test]
     pub fn shanten_works() {
         let hands = [
-            ([3, 4, 9, 10, 15, 15, 16, 20, 24, 27, 28, 29, 31, 33], 5),
-            ([1, 4, 10, 18, 18, 21, 22, 25, 26, 26, 28, 29, 31, 32], 5),
-            ([1, 2, 2, 3, 4, 5, 6, 11, 14, 14, 21, 24, 25, 32], 2),
-            ([5, 6, 7, 10, 12, 13, 14, 14, 20, 21, 22, 24, 25, 33], 1),
-            ([1, 2, 5, 5, 6, 7, 8, 10, 13, 14, 21, 25, 29, 29], 2),
-            ([7, 8, 11, 11, 12, 14, 15, 19, 23, 24, 25, 26, 28, 32], 3),
-            ([1, 2, 12, 13, 13, 17, 20, 21, 24, 25, 25, 25, 30, 33], 3),
-            ([0, 0, 1, 3, 5, 5, 14, 15, 21, 22, 24, 25, 25, 32], 3),
-            ([2, 4, 4, 5, 6, 7, 14, 14, 15, 19, 20, 24, 25, 26], 1),
-            ([1, 2, 5, 6, 11, 12, 13, 16, 16, 17, 26, 27, 31, 33], 3),
-            ([2, 2, 3, 6, 6, 9, 11, 12, 16, 20, 21, 23, 24, 25], 2),
-            ([1, 3, 5, 5, 9, 10, 13, 14, 15, 18, 19, 21, 23, 25], 2),
-            ([1, 1, 4, 7, 10, 11, 16, 17, 20, 20, 20, 22, 22, 22], 1),
-            ([3, 3, 4, 5, 6, 7, 12, 13, 18, 18, 19, 19, 20, 20], 0),
-            ([0, 2, 3, 3, 11, 13, 15, 20, 20, 22, 29, 29, 31, 31], 3),
-            ([0, 2, 4, 6, 6, 10, 11, 21, 21, 22, 22, 24, 27, 27], 3),
-            ([2, 2, 4, 8, 8, 8, 14, 21, 22, 22, 24, 25, 25, 26], 2),
-            ([0, 1, 2, 6, 8, 9, 10, 14, 18, 20, 20, 21, 24, 25], 2),
-            ([0, 3, 5, 6, 10, 10, 19, 21, 23, 23, 28, 30, 30, 32], 3),
-            ([0, 3, 5, 7, 8, 8, 16, 17, 22, 22, 27, 30, 32, 33], 4),
-            ([0, 1, 3, 3, 7, 11, 12, 22, 23, 23, 24, 27, 27, 31], 2),
-            ([1, 5, 5, 6, 6, 9, 13, 15, 17, 23, 27, 31, 31, 33], 4),
-            ([2, 3, 9, 10, 11, 12, 15, 17, 22, 23, 24, 31, 32, 33], 2),
-            ([4, 6, 7, 11, 11, 19, 20, 21, 24, 25, 25, 27, 28, 29], 3),
-            ([6, 8, 9, 9, 10, 11, 11, 13, 16, 19, 21, 24, 25, 25], 2),
-            ([5, 5, 10, 11, 12, 16, 17, 18, 20, 21, 22, 23, 23, 23], 0),
-            ([2, 3, 6, 6, 9, 9, 10, 11, 12, 21, 23, 23, 24, 28], 2),
-            ([0, 1, 2, 4, 7, 8, 10, 12, 21, 23, 26, 29, 32, 33], 3),
-            ([0, 0, 6, 11, 12, 14, 15, 16, 20, 21, 27, 27, 27, 29], 1),
-            ([5, 6, 7, 9, 10, 11, 14, 15, 16, 17, 17, 22, 23, 30], 0),
-            ([2, 4, 11, 12, 13, 14, 15, 16, 16, 18, 19, 20, 27, 27], 0),
-            ([5, 7, 9, 10, 10, 12, 12, 13, 13, 20, 22, 25, 25, 29], 3),
-            ([1, 2, 3, 5, 12, 13, 14, 15, 18, 19, 20, 20, 21, 22], 0),
-            ([1, 1, 3, 6, 7, 8, 14, 18, 19, 20, 20, 22, 33, 33], 1),
-            ([3, 3, 5, 8, 8, 10, 13, 15, 17, 18, 23, 25, 27, 33], 4),
-            ([3, 4, 4, 6, 6, 10, 13, 16, 17, 19, 20, 22, 22, 31], 3),
-            ([3, 6, 8, 12, 15, 15, 16, 18, 19, 20, 22, 26, 29, 29], 3),
-            ([1, 2, 3, 12, 12, 14, 16, 19, 19, 20, 21, 21, 23, 29], 1),
-            ([2, 4, 4, 5, 6, 10, 11, 15, 22, 22, 23, 24, 24, 24], 1),
-            ([11, 13, 14, 15, 15, 16, 16, 17, 23, 23, 23, 24, 25, 26], 0),
-            ([0, 1, 6, 8, 8, 9, 11, 17, 17, 18, 20, 20, 21, 23], 3),
-            ([2, 3, 3, 3, 4, 5, 6, 13, 14, 15, 16, 23, 24, 25], 0),
-            ([5, 5, 7, 10, 11, 11, 12, 15, 23, 23, 24, 25, 33, 33], 2),
-            ([2, 3, 5, 12, 13, 14, 16, 17, 17, 21, 22, 23, 27, 33], 2),
-            ([6, 7, 9, 10, 11, 15, 21, 22, 23, 27, 27, 29, 29, 33], 1),
-            ([1, 2, 4, 5, 5, 6, 11, 13, 19, 20, 21, 24, 25, 30], 2),
-            ([0, 4, 5, 8, 10, 10, 11, 14, 14, 20, 20, 20, 33, 33], 2),
-            ([0, 1, 5, 5, 9, 11, 14, 14, 15, 16, 16, 20, 21, 22], 1),
-            ([2, 4, 8, 10, 11, 13, 15, 19, 21, 22, 24, 26, 30, 32], 4),
-            ([0, 5, 7, 10, 11, 12, 14, 16, 17, 19, 22, 24, 27, 33], 3),
-            ([2, 3, 7, 8, 12, 15, 16, 17, 24, 27, 28, 29, 29, 30], 3),
-            ([0, 0, 8, 8, 12, 12, 13, 13, 17, 17, 22, 22, 27, 32], 3),
-            ([1, 3, 10, 10, 11, 12, 12, 13, 13, 14, 16, 16, 24, 30], 1),
-            ([1, 2, 5, 6, 7, 9, 10, 12, 12, 14, 15, 16, 27, 29], 1),
-            ([0, 4, 5, 6, 6, 10, 12, 12, 13, 14, 19, 21, 23, 23], 1),
-            ([2, 3, 5, 7, 9, 10, 13, 16, 19, 22, 24, 24, 24, 25], 3),
-            ([1, 2, 2, 4, 5, 5, 7, 12, 13, 14, 19, 21, 24, 31], 2),
-            ([0, 2, 3, 5, 6, 7, 10, 10, 13, 13, 14, 15, 19, 25], 2),
-            ([3, 3, 6, 6, 8, 8, 11, 11, 17, 17, 18, 23, 23, 33], 3),
-            ([2, 3, 4, 7, 8, 8, 10, 13, 14, 14, 18, 18, 22, 23], 2),
-            ([2, 4, 6, 7, 11, 11, 11, 14, 18, 18, 20, 24, 25, 26], 1),
-            ([0, 2, 5, 6, 6, 8, 11, 11, 12, 18, 21, 23, 23, 31], 3),
-            ([4, 5, 6, 6, 10, 12, 12, 13, 14, 15, 18, 21, 23, 30], 2),
-            ([6, 7, 18, 20, 22, 23, 24, 26, 27, 28, 29, 31, 33, 33], 3),
-            ([0, 2, 2, 5, 9, 11, 11, 13, 14, 15, 16, 16, 17, 17], 2),
-            ([3, 5, 5, 5, 6, 7, 13, 13, 17, 17, 22, 31, 33, 33], 2),
-            ([0, 1, 2, 3, 4, 5, 6, 7, 10, 12, 12, 21, 22, 24], 1),
-            ([1, 1, 2, 2, 3, 4, 10, 10, 14, 14, 16, 22, 24, 27], 2),
-            ([4, 5, 6, 9, 10, 11, 13, 15, 22, 22, 24, 25, 25, 26], 0),
-            ([1, 2, 2, 2, 3, 5, 6, 6, 8, 10, 16, 21, 23, 31], 2),
-            ([0, 1, 2, 3, 9, 10, 11, 14, 16, 17, 17, 20, 21, 24], 1),
-            ([3, 5, 10, 11, 12, 14, 15, 16, 18, 18, 21, 22, 23, 33], 0),
-            ([1, 2, 3, 4, 4, 5, 5, 14, 15, 15, 16, 21, 21, 21], 0),
-            ([3, 4, 5, 12, 12, 13, 13, 14, 15, 16, 16, 21, 23, 26], 1),
-            ([0, 1, 1, 3, 3, 4, 12, 13, 19, 21, 21, 23, 25, 33], 3),
-            ([10, 12, 13, 14, 16, 16, 16, 17, 22, 23, 26, 30, 30, 32], 2),
-            ([3, 4, 4, 11, 14, 16, 16, 20, 21, 22, 23, 24, 26, 27], 3),
-            ([0, 2, 5, 5, 6, 7, 8, 9, 9, 10, 12, 18, 19, 28], 2),
-            ([3, 4, 5, 12, 13, 14, 15, 16, 16, 21, 21, 22, 24, 25], 1),
-            ([4, 4, 7, 10, 11, 14, 18, 18, 21, 22, 24, 25, 26, 30], 2),
-            ([2, 4, 5, 5, 7, 18, 18, 19, 22, 22, 23, 24, 27, 29], 3),
-            ([3, 3, 7, 8, 12, 13, 18, 19, 21, 24, 25, 25, 31, 31], 3),
-            ([1, 2, 3, 9, 11, 11, 13, 14, 15, 16, 17, 29, 33, 33], 1),
-            ([2, 6, 8, 9, 12, 15, 16, 19, 20, 20, 21, 22, 25, 26], 3),
-            ([5, 6, 7, 7, 7, 8, 8, 11, 12, 13, 24, 25, 30, 30], 1),
-            ([5, 7, 11, 11, 14, 15, 15, 16, 17, 21, 21, 21, 22, 24], 1),
-            ([0, 1, 2, 4, 6, 7, 8, 21, 22, 25, 25, 31, 31, 32], 1),
-            ([4, 11, 15, 19, 20, 20, 25, 25, 27, 28, 30, 30, 31, 32], 5),
-            ([11, 12, 13, 18, 19, 20, 21, 21, 22, 22, 23, 28, 30, 30], 0),
-            ([1, 2, 6, 12, 13, 14, 15, 17, 20, 23, 24, 25, 27, 31], 2),
-            ([1, 1, 2, 2, 3, 4, 4, 4, 5, 7, 7, 17, 22, 28], 2),
-            ([1, 2, 2, 9, 10, 17, 17, 18, 19, 20, 23, 24, 24, 32], 2),
-            ([0, 3, 10, 10, 13, 16, 20, 21, 23, 24, 25, 30, 31, 32], 4),
-            ([4, 7, 9, 9, 10, 11, 19, 22, 22, 24, 26, 31, 32, 33], 4),
-            ([0, 1, 3, 3, 5, 8, 12, 15, 21, 25, 27, 28, 28, 31], 5),
-            ([2, 2, 4, 5, 9, 12, 13, 14, 15, 18, 20, 25, 25, 25], 1),
-            ([2, 3, 5, 10, 10, 11, 13, 21, 21, 25, 25, 31, 32, 32], 3),
-            ([0, 2, 7, 9, 12, 13, 15, 15, 17, 22, 23, 23, 26, 30], 4),
-            ([0, 4, 5, 6, 11, 12, 15, 18, 20, 21, 22, 26, 27, 28], 3),
-            ([3, 11, 12, 13, 14, 15, 16, 18, 18, 19, 21, 22, 22, 28], 1),
-            ([2, 2, 2, 5, 7, 10, 12, 13, 14, 15, 15, 20, 20, 22], 1),
-            ([0, 0, 1, 2, 8, 8, 14, 22, 24, 24, 26, 27, 29, 33], 3),
-            ([3, 4, 6, 6, 7, 14, 14, 14, 22, 23, 25, 25, 26, 31], 2),
-            ([1, 1, 5, 6, 10, 13, 15, 16, 20, 22, 22, 24, 30, 30], 3),
-            ([3, 3, 6, 7, 8, 10, 12, 15, 16, 22, 23, 24, 24, 30], 1),
-            ([5, 7, 7, 11, 12, 13, 14, 15, 20, 25, 25, 26, 29, 29], 2),
-            ([0, 12, 12, 15, 17, 18, 22, 27, 28, 28, 29, 29, 31, 33], 4),
-            ([3, 3, 5, 6, 10, 12, 13, 15, 19, 21, 21, 23, 25, 28], 3),
-            ([3, 3, 4, 6, 7, 17, 20, 21, 23, 23, 26, 28, 30, 30], 3),
-            ([0, 1, 2, 2, 10, 11, 14, 14, 16, 16, 18, 19, 21, 25], 2),
-            ([0, 3, 5, 10, 14, 16, 17, 18, 19, 19, 25, 29, 31, 33], 5),
-            ([3, 8, 11, 12, 12, 17, 21, 22, 22, 24, 25, 26, 29, 33], 4),
-            ([10, 11, 13, 14, 15, 18, 19, 19, 20, 29, 29, 29, 33, 33], 0),
-            ([0, 4, 8, 12, 14, 15, 15, 15, 18, 18, 19, 19, 21, 25], 3),
-            ([3, 5, 9, 12, 13, 14, 16, 17, 17, 19, 21, 22, 23, 27], 2),
-            ([2, 7, 8, 14, 15, 16, 21, 22, 23, 23, 24, 25, 25, 32], 1),
-            ([1, 5, 6, 10, 11, 11, 12, 13, 13, 21, 21, 25, 31, 31], 2),
-            ([2, 2, 3, 5, 18, 20, 20, 21, 22, 23, 24, 25, 25, 26], 1),
-            ([0, 1, 2, 5, 9, 10, 11, 13, 16, 17, 18, 20, 22, 24], 2),
-            ([0, 1, 3, 4, 5, 12, 13, 16, 18, 20, 23, 31, 32, 32], 2),
-            ([8, 10, 12, 15, 16, 16, 18, 21, 22, 25, 26, 28, 29, 33], 4),
-            ([0, 0, 1, 1, 3, 11, 12, 12, 13, 19, 19, 20, 23, 28], 3),
-            ([2, 6, 6, 9, 11, 14, 15, 20, 22, 23, 25, 26, 28, 32], 3),
-            ([4, 7, 9, 10, 10, 12, 12, 13, 20, 22, 23, 25, 25, 33], 3),
-            ([0, 0, 0, 4, 5, 11, 13, 15, 16, 17, 20, 21, 31, 31], 1),
-            ([6, 6, 10, 10, 10, 14, 14, 23, 24, 25, 25, 28, 28, 28], 0),
-            ([0, 7, 9, 9, 11, 12, 13, 19, 20, 22, 23, 23, 31, 33], 3),
-            ([3, 4, 6, 7, 8, 10, 12, 18, 18, 20, 22, 24, 28, 31], 2),
-            ([0, 6, 6, 10, 10, 11, 15, 16, 17, 19, 21, 25, 26, 31], 2),
-            ([2, 3, 4, 8, 8, 10, 11, 12, 14, 14, 19, 25, 25, 33], 1),
-            ([2, 6, 9, 12, 14, 17, 17, 23, 25, 26, 26, 29, 32, 33], 4),
-            ([4, 6, 6, 9, 10, 12, 14, 14, 15, 16, 17, 18, 23, 27], 3),
-            ([1, 2, 3, 9, 9, 21, 22, 24, 25, 26, 31, 31, 33, 33], 1),
-            ([1, 2, 3, 4, 5, 7, 12, 15, 22, 24, 27, 32, 33, 33], 3),
-            ([5, 7, 14, 15, 16, 19, 20, 24, 26, 28, 30, 31, 32, 33], 3),
-            ([2, 2, 6, 8, 11, 12, 15, 16, 19, 20, 20, 21, 23, 28], 2),
-            ([3, 4, 10, 11, 11, 13, 14, 14, 16, 16, 24, 25, 25, 26], 2),
-            ([5, 6, 13, 14, 15, 18, 19, 19, 20, 22, 24, 24, 29, 29], 1),
-            ([3, 3, 5, 7, 8, 10, 15, 23, 23, 29, 29, 31, 32, 33], 4),
-            ([1, 5, 6, 7, 15, 15, 18, 19, 20, 21, 21, 23, 25, 26], 1),
-            ([0, 0, 2, 4, 18, 19, 19, 20, 20, 23, 24, 24, 25, 27], 1),
-            ([6, 6, 9, 9, 12, 12, 13, 13, 14, 14, 16, 16, 17, 17], 1),
-            ([2, 6, 6, 7, 9, 11, 13, 16, 17, 17, 20, 22, 24, 33], 4),
-            ([0, 3, 3, 5, 11, 12, 13, 14, 14, 16, 19, 22, 25, 25], 3),
-            ([0, 2, 6, 7, 7, 11, 15, 16, 19, 21, 26, 27, 28, 32], 4),
-            ([3, 4, 13, 15, 16, 18, 18, 18, 22, 23, 24, 25, 26, 31], 2),
-            ([1, 2, 2, 5, 5, 13, 14, 14, 20, 20, 26, 26, 27, 33], 3),
-            ([4, 5, 12, 13, 14, 18, 18, 18, 22, 23, 24, 26, 26, 29], 0),
-            ([3, 5, 5, 6, 7, 11, 12, 19, 22, 23, 24, 26, 27, 27], 1),
-            ([1, 5, 5, 12, 15, 15, 15, 16, 18, 21, 23, 23, 29, 29], 3),
-            ([1, 2, 3, 6, 7, 9, 10, 10, 13, 21, 23, 27, 29, 29], 2),
-            ([2, 4, 4, 6, 8, 11, 11, 12, 13, 14, 15, 18, 19, 23], 2),
-            ([2, 3, 4, 17, 18, 19, 19, 21, 21, 24, 24, 26, 33, 33], 2),
-            ([0, 1, 2, 5, 7, 11, 12, 12, 14, 16, 16, 20, 23, 29], 2),
-            ([5, 6, 18, 19, 20, 21, 22, 23, 23, 25, 25, 25, 30, 30], 0),
-            ([0, 1, 3, 4, 5, 13, 16, 16, 17, 20, 21, 23, 23, 25], 2),
-            ([0, 1, 2, 6, 7, 8, 10, 12, 14, 16, 20, 21, 24, 25], 2),
-            ([0, 1, 2, 5, 5, 6, 10, 15, 17, 19, 22, 22, 29, 31], 3),
-            ([1, 5, 5, 7, 8, 8, 10, 11, 15, 19, 23, 23, 32, 33], 4),
-            ([4, 6, 6, 6, 10, 15, 16, 17, 21, 22, 24, 29, 29, 30], 2),
-            ([2, 4, 6, 7, 11, 15, 16, 17, 18, 20, 26, 26, 26, 27], 2),
-            ([0, 3, 3, 4, 12, 12, 14, 15, 23, 23, 25, 27, 27, 31], 3),
-            ([1, 2, 7, 8, 10, 10, 13, 13, 14, 16, 18, 22, 27, 32], 3),
-            ([1, 1, 1, 5, 5, 5, 7, 7, 8, 11, 12, 14, 14, 31], 1),
-            ([0, 2, 3, 4, 6, 6, 7, 10, 16, 17, 21, 23, 24, 32], 3),
-            ([3, 10, 10, 11, 12, 13, 14, 19, 21, 23, 24, 25, 31, 32], 2),
-            ([4, 4, 5, 7, 7, 9, 12, 12, 13, 13, 15, 15, 20, 23], 3),
-            ([0, 2, 3, 4, 6, 7, 7, 10, 12, 19, 22, 23, 23, 32], 3),
-            ([1, 3, 5, 6, 9, 10, 11, 13, 13, 14, 16, 29, 29, 29], 1),
-            ([2, 10, 11, 11, 13, 14, 16, 18, 20, 20, 21, 22, 23, 23], 2),
-            ([4, 5, 6, 7, 7, 12, 14, 14, 15, 16, 20, 21, 22, 23], 0),
-            ([1, 2, 3, 12, 18, 19, 19, 21, 22, 24, 24, 25, 27, 33], 3),
-            ([0, 4, 8, 14, 15, 15, 17, 19, 20, 21, 25, 26, 28, 28], 2),
-            ([3, 5, 6, 8, 9, 16, 17, 19, 21, 25, 26, 28, 31, 32], 4),
-            ([1, 5, 7, 10, 11, 14, 14, 16, 16, 21, 24, 28, 29, 30], 4),
-            ([3, 3, 4, 4, 5, 5, 7, 7, 9, 14, 16, 24, 25, 26], 0),
-            ([1, 3, 3, 11, 11, 12, 12, 13, 18, 19, 20, 22, 24, 26], 1),
-            ([1, 3, 4, 4, 7, 9, 9, 18, 19, 19, 20, 22, 31, 31], 2),
-            ([0, 3, 7, 8, 10, 16, 20, 25, 26, 26, 28, 29, 32, 33], 6),
-            ([0, 1, 1, 2, 3, 5, 7, 7, 8, 13, 14, 18, 32, 32], 2),
-            ([0, 1, 4, 7, 8, 11, 11, 15, 18, 20, 21, 27, 29, 29], 3),
-            ([1, 2, 2, 3, 7, 8, 12, 13, 15, 20, 21, 23, 32, 32], 2),
-            ([1, 2, 3, 6, 7, 9, 14, 19, 19, 20, 20, 20, 23, 26], 2),
-            ([1, 3, 5, 6, 6, 7, 8, 12, 16, 28, 31, 32, 32, 33], 3),
-            ([3, 5, 6, 6, 6, 13, 15, 17, 18, 21, 29, 30, 31, 33], 4),
-            ([0, 1, 3, 4, 5, 11, 11, 13, 24, 25, 27, 27, 29, 29], 2),
-            ([0, 0, 0, 1, 3, 3, 9, 10, 13, 13, 15, 15, 16, 33], 2),
-            ([0, 1, 2, 5, 7, 11, 12, 12, 14, 16, 16, 23, 28, 29], 2),
-            ([0, 0, 1, 6, 7, 8, 11, 14, 15, 16, 18, 18, 20, 33], 2),
-            ([1, 2, 3, 6, 7, 9, 21, 22, 22, 24, 24, 30, 31, 32], 3),
-            ([1, 3, 4, 14, 14, 15, 15, 16, 18, 19, 20, 23, 23, 28], 1),
-            ([14, 15, 16, 20, 21, 23, 24, 25, 28, 29, 29, 29, 32, 32], 0),
-            ([5, 6, 7, 10, 11, 15, 15, 16, 21, 22, 23, 25, 25, 31], 1),
-            ([2, 3, 5, 6, 6, 7, 7, 9, 10, 15, 17, 23, 25, 26], 3),
-            ([5, 6, 8, 9, 11, 18, 18, 19, 21, 21, 21, 23, 24, 31], 2),
-            ([2, 3, 8, 11, 11, 13, 14, 16, 17, 18, 22, 23, 27, 31], 3),
-            ([6, 6, 7, 8, 8, 12, 12, 13, 13, 16, 16, 22, 23, 26], 2),
-            ([2, 2, 8, 8, 9, 9, 14, 14, 16, 16, 16, 19, 19, 20], 2),
-            ([19, 20, 20, 21, 22, 23, 23, 24, 27, 31, 31, 32, 33, 33], 2),
-            ([2, 2, 3, 3, 3, 4, 4, 5, 20, 26, 26, 29, 29, 29], 0),
-            ([2, 3, 3, 6, 7, 8, 12, 14, 15, 15, 16, 23, 24, 30], 2),
-            ([2, 4, 5, 6, 7, 11, 13, 15, 16, 19, 19, 20, 20, 22], 2),
-            ([0, 1, 3, 9, 17, 20, 23, 23, 24, 25, 28, 31, 32, 33], 5),
-            ([0, 3, 4, 9, 11, 15, 16, 22, 23, 26, 28, 29, 29, 31], 3),
-            ([0, 1, 2, 5, 11, 12, 12, 21, 22, 23, 23, 23, 28, 28], 1),
-            ([0, 1, 2, 7, 7, 10, 14, 15, 18, 19, 20, 21, 22, 23], 0),
-            ([0, 1, 2, 6, 8, 8, 16, 21, 21, 23, 25, 25, 30, 31], 3),
-            ([1, 5, 6, 7, 7, 10, 10, 12, 14, 20, 20, 23, 30, 30], 2),
-            ([2, 3, 5, 5, 5, 12, 17, 19, 20, 21, 25, 25, 33, 33], 1),
-            ([2, 3, 10, 10, 10, 11, 15, 16, 20, 20, 21, 21, 22, 23], 1),
-            ([4, 5, 5, 11, 11, 12, 12, 13, 20, 22, 22, 25, 25, 25], 1),
-            ([2, 2, 5, 6, 7, 15, 16, 18, 19, 20, 22, 25, 25, 26], 1),
-            ([5, 8, 14, 17, 18, 20, 22, 25, 27, 28, 28, 29, 31, 32], 6),
-            ([2, 3, 4, 10, 11, 12, 20, 21, 22, 23, 23, 29, 29, 30], 0),
-            ([2, 3, 4, 5, 6, 8, 8, 12, 13, 21, 25, 26, 26, 31], 2),
-            ([1, 2, 5, 5, 6, 13, 13, 13, 15, 15, 20, 21, 29, 29], 2),
-            ([0, 3, 3, 7, 9, 12, 14, 19, 21, 22, 22, 24, 29, 33], 4),
-            ([0, 4, 5, 6, 9, 11, 12, 15, 18, 20, 21, 22, 22, 28], 3),
-            ([1, 1, 2, 3, 5, 6, 6, 8, 11, 12, 12, 20, 24, 25], 2),
-            ([2, 2, 4, 6, 6, 7, 8, 10, 12, 12, 20, 23, 25, 27], 2),
-            ([8, 9, 11, 12, 14, 16, 19, 21, 21, 21, 24, 25, 25, 26], 2),
-            ([1, 1, 6, 6, 12, 12, 13, 13, 15, 21, 24, 29, 32, 32], 3),
-            ([7, 12, 14, 18, 20, 21, 21, 23, 24, 27, 28, 28, 30, 33], 3),
-            ([2, 3, 4, 11, 13, 14, 14, 14, 19, 20, 21, 22, 23, 24], 0),
-            ([1, 2, 3, 4, 5, 13, 15, 16, 17, 18, 19, 20, 20, 23], 1),
-            ([0, 2, 2, 9, 9, 11, 12, 13, 14, 14, 17, 24, 27, 27], 2),
-            ([1, 2, 3, 6, 7, 8, 12, 13, 13, 14, 15, 21, 21, 23], 0),
-            ([1, 1, 3, 4, 6, 7, 10, 12, 14, 23, 23, 24, 25, 27], 2),
-            ([0, 2, 2, 6, 14, 16, 17, 18, 18, 22, 24, 27, 31, 33], 4),
-            ([0, 1, 2, 6, 7, 8, 13, 13, 14, 14, 16, 18, 19, 19], 1),
-            ([3, 3, 4, 5, 6, 7, 11, 12, 14, 14, 16, 21, 22, 33], 2),
-            ([2, 3, 4, 6, 8, 19, 20, 21, 21, 24, 25, 26, 26, 26], 0),
-            ([2, 3, 6, 8, 9, 10, 12, 13, 15, 16, 17, 23, 25, 25], 2),
-            ([2, 7, 9, 11, 12, 13, 15, 16, 20, 23, 24, 25, 27, 33], 3),
-            ([3, 6, 9, 10, 10, 11, 11, 18, 19, 22, 23, 25, 28, 29], 3),
-            ([1, 3, 3, 11, 12, 12, 15, 16, 18, 20, 20, 21, 25, 25], 3),
-            ([0, 1, 2, 6, 9, 10, 11, 12, 14, 16, 18, 19, 25, 25], 1),
-            ([1, 7, 8, 11, 12, 15, 17, 19, 22, 25, 29, 29, 31, 33], 4),
-            ([0, 1, 2, 6, 11, 11, 13, 13, 18, 19, 20, 25, 25, 26], 1),
-            ([5, 6, 6, 9, 11, 19, 19, 20, 20, 21, 22, 24, 26, 32], 2),
-            ([1, 2, 3, 12, 12, 14, 16, 18, 19, 19, 20, 21, 21, 23], 1),
-            ([2, 3, 5, 6, 12, 12, 13, 13, 14, 19, 21, 23, 25, 29], 3),
-            ([0, 1, 3, 9, 11, 12, 16, 17, 17, 18, 23, 30, 31, 32], 5),
-            ([1, 2, 3, 6, 7, 12, 13, 14, 19, 20, 20, 21, 21, 22], 0),
-            ([2, 3, 5, 6, 7, 11, 12, 15, 20, 20, 23, 23, 29, 31], 2),
-            ([1, 2, 4, 7, 7, 13, 13, 14, 14, 16, 18, 18, 19, 19], 3),
-            ([1, 8, 9, 10, 10, 11, 15, 15, 17, 17, 20, 20, 23, 30], 3),
-            ([1, 1, 3, 4, 4, 6, 7, 8, 10, 11, 14, 15, 16, 20], 1),
-            ([0, 4, 18, 19, 21, 23, 26, 26, 28, 31, 31, 31, 32, 32], 2),
-            ([1, 3, 6, 6, 13, 16, 16, 24, 25, 25, 26, 28, 30, 30], 2),
-            ([4, 6, 9, 10, 12, 14, 14, 14, 17, 22, 22, 24, 24, 29], 2),
-            ([1, 1, 1, 3, 6, 14, 16, 19, 21, 22, 23, 24, 24, 33], 2),
-            ([0, 2, 3, 6, 7, 9, 11, 15, 16, 27, 28, 30, 31, 33], 4),
-            ([0, 4, 6, 7, 8, 12, 12, 13, 17, 20, 25, 26, 26, 32], 4),
-            ([0, 0, 4, 7, 7, 11, 11, 13, 16, 18, 18, 19, 23, 24], 3),
-            ([4, 5, 5, 9, 10, 11, 13, 20, 20, 22, 23, 23, 24, 24], 1),
-            ([12, 13, 14, 15, 19, 19, 20, 20, 20, 21, 22, 23, 25, 26], 0),
-            ([4, 4, 5, 6, 6, 9, 11, 12, 17, 21, 21, 24, 25, 26], 1),
-            ([0, 1, 2, 5, 10, 10, 10, 14, 15, 18, 19, 26, 26, 31], 1),
-            ([3, 3, 3, 5, 6, 6, 12, 13, 14, 23, 24, 24, 25, 26], 0),
-            ([0, 2, 6, 7, 8, 8, 17, 18, 18, 19, 19, 26, 31, 32], 3),
-            ([1, 2, 4, 7, 7, 12, 14, 14, 15, 21, 22, 22, 23, 24], 2),
-            ([0, 1, 2, 9, 10, 10, 15, 17, 18, 19, 22, 26, 31, 31], 2),
-            ([3, 4, 9, 14, 14, 16, 18, 19, 20, 21, 22, 24, 25, 33], 2),
-            ([2, 2, 6, 8, 10, 10, 11, 11, 12, 12, 16, 19, 21, 23], 1),
-            ([1, 2, 10, 12, 15, 17, 17, 18, 22, 23, 28, 31, 31, 33], 3),
-            ([1, 3, 5, 6, 6, 8, 9, 10, 19, 22, 27, 27, 28, 33], 3),
-            ([1, 3, 5, 9, 9, 11, 13, 13, 13, 18, 24, 25, 28, 28], 2),
-            ([3, 3, 4, 5, 6, 7, 7, 9, 12, 15, 20, 24, 32, 32], 3),
-            ([1, 2, 3, 5, 6, 8, 8, 20, 21, 22, 22, 23, 24, 25], 0),
-            ([4, 5, 6, 8, 10, 14, 16, 20, 22, 25, 25, 32, 32, 33], 2),
-            ([0, 0, 1, 1, 2, 5, 13, 13, 15, 15, 16, 16, 28, 28], 2),
-            ([0, 2, 2, 5, 6, 6, 12, 14, 16, 24, 26, 26, 30, 33], 4),
-            ([0, 5, 7, 11, 12, 14, 14, 18, 18, 20, 23, 31, 32, 33], 4),
-            ([1, 2, 3, 9, 12, 12, 14, 16, 19, 19, 20, 21, 21, 23], 1),
-            ([0, 2, 3, 5, 5, 6, 10, 14, 15, 20, 23, 23, 23, 29], 3),
-            ([3, 8, 8, 9, 12, 12, 13, 15, 18, 19, 20, 24, 29, 29], 2),
-            ([2, 3, 6, 7, 8, 11, 12, 13, 20, 21, 24, 26, 27, 27], 1),
-            ([0, 0, 1, 2, 3, 3, 4, 9, 10, 15, 15, 16, 18, 20], 2),
-            ([0, 1, 3, 9, 9, 13, 15, 19, 21, 21, 22, 23, 27, 28], 2),
-            ([2, 3, 5, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 33], 0),
-            ([5, 7, 11, 12, 13, 15, 16, 17, 17, 22, 23, 27, 30, 30], 1),
-            ([0, 2, 4, 5, 7, 7, 9, 10, 11, 17, 21, 22, 24, 25], 2),
-            ([1, 9, 10, 15, 16, 22, 23, 24, 24, 25, 30, 30, 32, 33], 2),
-            ([3, 9, 11, 11, 12, 13, 18, 19, 19, 19, 22, 22, 23, 24], 1),
-            ([7, 11, 13, 15, 15, 16, 18, 19, 20, 21, 21, 21, 22, 29], 2),
-            ([1, 3, 3, 5, 6, 7, 9, 11, 13, 13, 23, 23, 24, 24], 2),
-            ([0, 1, 2, 3, 11, 12, 14, 15, 16, 19, 19, 20, 21, 22], 0),
-            ([2, 2, 9, 10, 10, 11, 11, 14, 14, 20, 20, 21, 23, 23], 2),
-            ([2, 5, 11, 12, 12, 13, 14, 16, 20, 21, 22, 26, 28, 28], 2),
-            ([5, 7, 7, 9, 10, 10, 15, 18, 20, 22, 23, 23, 23, 24], 2),
-            ([1, 2, 3, 12, 13, 14, 15, 17, 17, 20, 20, 21, 24, 25], 1),
-            ([6, 6, 12, 14, 15, 16, 19, 19, 24, 24, 26, 27, 27, 27], 1),
-            ([3, 3, 3, 5, 7, 11, 12, 13, 13, 14, 15, 20, 20, 22], 0),
-            ([1, 3, 5, 5, 9, 10, 11, 13, 14, 15, 19, 21, 23, 25], 1),
-            ([2, 4, 9, 9, 11, 11, 12, 16, 20, 21, 22, 24, 25, 28], 2),
-            ([1, 2, 2, 3, 6, 7, 7, 10, 13, 21, 21, 23, 23, 23], 2),
-            ([0, 1, 1, 1, 3, 4, 5, 10, 12, 14, 15, 19, 19, 19], 1),
-            ([0, 0, 4, 5, 15, 16, 17, 18, 19, 20, 29, 33, 33, 33], 0),
-            ([0, 2, 4, 9, 10, 15, 15, 17, 19, 22, 22, 23, 26, 29], 4),
-            ([1, 2, 2, 2, 3, 11, 12, 21, 22, 22, 23, 23, 24, 26], 0),
-            ([1, 3, 5, 6, 7, 7, 10, 10, 12, 12, 13, 20, 20, 32], 2),
-            ([5, 6, 10, 10, 12, 12, 13, 15, 15, 19, 20, 25, 30, 30], 3),
-            ([5, 6, 7, 9, 15, 15, 18, 19, 20, 21, 21, 23, 25, 26], 1),
-            ([2, 5, 12, 14, 14, 15, 16, 16, 21, 22, 22, 25, 30, 30], 3),
-            ([1, 2, 2, 3, 3, 5, 5, 16, 19, 20, 21, 23, 24, 25], 0),
-            ([5, 12, 12, 13, 14, 14, 19, 21, 22, 24, 30, 30, 30, 32], 2),
-            ([2, 3, 6, 7, 10, 13, 16, 16, 17, 17, 21, 21, 23, 25], 3),
-            ([2, 3, 4, 5, 7, 8, 12, 19, 21, 22, 24, 27, 28, 28], 2),
-            ([2, 2, 2, 9, 10, 11, 13, 13, 19, 20, 21, 23, 24, 24], 0),
-            ([2, 6, 8, 11, 14, 16, 17, 18, 20, 25, 27, 28, 31, 32], 5),
-            ([2, 3, 4, 5, 6, 7, 10, 11, 12, 14, 19, 24, 25, 26], 0),
-            ([1, 1, 3, 10, 11, 12, 12, 14, 16, 21, 22, 24, 24, 25], 2),
-            ([0, 1, 6, 7, 13, 13, 14, 14, 25, 25, 26, 33, 33, 33], 2),
-            ([0, 1, 2, 5, 5, 6, 7, 8, 21, 22, 23, 24, 25, 26], -1),
-            ([1, 4, 4, 6, 6, 8, 8, 12, 14, 16, 21, 25, 29, 30], 4),
-            ([0, 1, 2, 13, 13, 16, 16, 16, 19, 20, 21, 31, 31, 31], -1),
-            ([1, 3, 6, 7, 8, 11, 13, 20, 23, 24, 24, 26, 32, 32], 2),
-            ([1, 3, 3, 4, 7, 8, 10, 14, 20, 22, 24, 25, 26, 32], 3),
-            ([1, 2, 2, 3, 5, 6, 8, 8, 20, 21, 22, 23, 24, 25], 0),
-            ([4, 6, 8, 11, 14, 16, 20, 20, 21, 22, 23, 24, 26, 27], 2),
-            ([0, 5, 5, 9, 10, 14, 16, 18, 19, 25, 27, 29, 31, 33], 4),
-            ([3, 4, 6, 7, 7, 9, 22, 23, 23, 25, 25, 26, 27, 33], 3),
-            ([2, 2, 4, 11, 12, 14, 15, 15, 15, 23, 25, 30, 30, 33], 2),
-            ([1, 2, 2, 7, 12, 13, 14, 14, 15, 18, 18, 20, 22, 31], 2),
-            ([1, 2, 4, 6, 6, 13, 21, 22, 29, 31, 31, 33, 33, 33], 2),
-            ([0, 1, 2, 5, 8, 11, 12, 12, 21, 22, 23, 23, 23, 28], 2),
-            ([1, 4, 5, 5, 7, 10, 11, 12, 14, 19, 21, 22, 24, 29], 3),
-            ([1, 1, 2, 12, 13, 14, 22, 22, 24, 24, 24, 25, 30, 30], 1),
-            ([1, 2, 2, 4, 6, 9, 11, 13, 15, 16, 19, 22, 25, 29], 4),
-            ([1, 1, 4, 8, 15, 17, 21, 23, 25, 25, 27, 29, 30, 32], 4),
-            ([3, 4, 9, 10, 11, 12, 13, 15, 16, 17, 19, 22, 22, 26], 1),
-            ([2, 3, 4, 7, 8, 9, 10, 14, 16, 16, 19, 21, 23, 26], 2),
-            ([1, 4, 5, 9, 10, 10, 12, 18, 19, 20, 27, 28, 28, 32], 2),
-            ([2, 4, 4, 6, 7, 12, 13, 14, 15, 18, 19, 21, 22, 33], 2),
-            ([1, 2, 3, 7, 9, 21, 22, 24, 25, 26, 31, 31, 33, 33], 1),
-            ([2, 3, 4, 8, 12, 12, 13, 14, 24, 25, 26, 30, 30, 30], 0),
-            ([2, 3, 4, 9, 11, 13, 14, 14, 15, 18, 19, 20, 32, 32], 0),
-            ([1, 5, 12, 13, 13, 14, 15, 18, 23, 24, 27, 28, 30, 30], 3),
-            ([1, 2, 7, 8, 12, 12, 16, 17, 19, 20, 22, 24, 26, 30], 3),
-            ([20, 21, 22, 22, 23, 23, 23, 25, 26, 26, 28, 28, 31, 31], 1),
-            ([0, 1, 2, 5, 6, 12, 16, 18, 20, 20, 22, 23, 24, 24], 2),
-            ([1, 3, 3, 4, 4, 6, 8, 14, 19, 22, 23, 24, 28, 30], 3),
-            ([2, 4, 4, 7, 8, 9, 13, 14, 14, 16, 16, 16, 32, 33], 3),
-            ([1, 1, 6, 11, 12, 13, 15, 15, 18, 18, 24, 25, 33, 33], 2),
-            ([1, 1, 6, 7, 8, 13, 13, 15, 16, 17, 18, 19, 25, 27], 1),
-            ([6, 7, 9, 12, 20, 22, 23, 26, 27, 28, 29, 31, 33, 33], 5),
-            ([0, 7, 8, 8, 8, 9, 10, 12, 12, 15, 18, 21, 22, 23], 2),
-            ([2, 3, 10, 15, 17, 21, 22, 27, 27, 27, 28, 29, 29, 29], 2),
-            ([0, 4, 4, 5, 6, 6, 8, 10, 12, 14, 19, 19, 31, 31], 2),
-            ([2, 3, 4, 12, 13, 14, 15, 18, 18, 18, 20, 21, 30, 30], 0),
-            ([0, 7, 8, 8, 8, 12, 12, 13, 13, 14, 14, 19, 21, 25], 1),
-            ([3, 6, 7, 7, 10, 10, 13, 14, 15, 15, 16, 25, 27, 31], 3),
-            ([0, 5, 9, 14, 14, 15, 16, 19, 20, 23, 26, 26, 27, 33], 4),
-            ([1, 2, 2, 3, 4, 13, 14, 15, 15, 19, 22, 22, 28, 28], 1),
-            ([0, 0, 0, 1, 4, 11, 11, 13, 19, 23, 27, 27, 27, 30], 3),
-            ([0, 2, 2, 7, 8, 12, 13, 13, 17, 21, 23, 24, 29, 31], 4),
-            ([1, 3, 4, 4, 8, 10, 11, 13, 16, 16, 23, 23, 24, 32], 3),
-            ([0, 2, 7, 8, 11, 15, 16, 22, 24, 25, 27, 31, 33, 33], 3),
-            ([1, 4, 8, 8, 12, 18, 18, 19, 20, 21, 22, 23, 24, 33], 2),
-            ([3, 9, 11, 12, 13, 16, 17, 19, 20, 22, 22, 23, 30, 30], 2),
-            ([3, 4, 5, 5, 12, 13, 13, 14, 15, 15, 15, 20, 22, 22], 1),
-            ([1, 2, 3, 11, 12, 13, 13, 14, 15, 21, 21, 21, 22, 22], -1),
-            ([0, 1, 2, 3, 5, 6, 7, 11, 11, 12, 14, 24, 25, 26], 0),
-            ([1, 2, 3, 4, 4, 6, 11, 15, 21, 21, 22, 24, 32, 32], 2),
-            ([0, 1, 2, 3, 4, 7, 8, 19, 28, 29, 30, 30, 30, 32], 2),
-            ([0, 1, 2, 6, 8, 9, 13, 14, 17, 19, 21, 24, 24, 32], 2),
-            ([0, 0, 1, 8, 10, 14, 14, 18, 22, 23, 24, 24, 26, 27], 3),
-            ([5, 7, 10, 11, 15, 16, 18, 19, 20, 20, 22, 22, 24, 25], 2),
-            ([2, 4, 9, 9, 10, 11, 12, 14, 14, 21, 23, 24, 26, 28], 2),
-            ([3, 5, 7, 10, 15, 17, 20, 21, 22, 23, 24, 25, 25, 26], 2),
-            ([3, 4, 5, 7, 8, 10, 11, 12, 14, 16, 16, 22, 23, 24], 0),
-            ([4, 6, 7, 13, 13, 14, 14, 16, 25, 25, 26, 33, 33, 33], 2),
-            ([1, 2, 3, 5, 6, 7, 11, 11, 12, 13, 20, 20, 31, 31], 0),
-            ([1, 2, 7, 10, 11, 12, 12, 13, 15, 16, 17, 18, 19, 22], 2),
-            ([0, 2, 4, 5, 6, 7, 13, 14, 16, 16, 18, 19, 20, 21], 1),
-            ([3, 4, 5, 10, 12, 12, 13, 14, 19, 19, 23, 24, 25, 32], 0),
-            ([1, 2, 3, 9, 10, 11, 11, 12, 13, 15, 18, 18, 24, 25], 0),
-            ([3, 3, 4, 5, 6, 7, 12, 13, 13, 20, 21, 22, 32, 32], 1),
-            ([1, 8, 12, 15, 16, 16, 17, 23, 26, 27, 28, 29, 30, 32], 6),
-            ([1, 5, 7, 8, 15, 16, 17, 18, 20, 24, 26, 27, 31, 33], 3),
-            ([2, 3, 4, 6, 6, 9, 11, 11, 11, 20, 21, 22, 23, 23], 0),
-            ([2, 5, 5, 8, 9, 13, 15, 15, 15, 17, 25, 26, 28, 28], 3),
-            ([1, 3, 5, 5, 6, 14, 14, 15, 19, 20, 24, 26, 29, 29], 3),
-            ([0, 2, 6, 6, 8, 11, 13, 16, 19, 20, 23, 24, 28, 32], 3),
-            ([0, 2, 4, 7, 7, 11, 12, 13, 14, 15, 16, 20, 21, 23], 1),
-            ([0, 0, 1, 1, 2, 10, 10, 14, 15, 15, 16, 19, 24, 25], 1),
-            ([5, 9, 9, 10, 23, 24, 24, 25, 26, 27, 27, 27, 30, 30], 1),
-            ([0, 1, 2, 3, 4, 4, 5, 18, 19, 20, 21, 22, 26, 26], 0),
-            ([2, 6, 8, 14, 15, 16, 18, 19, 20, 21, 25, 32, 33, 33], 2),
-            ([0, 1, 3, 4, 5, 13, 14, 15, 19, 20, 23, 27, 32, 33], 2),
-            ([1, 3, 9, 9, 10, 11, 11, 16, 17, 21, 22, 23, 28, 28], 1),
-            ([5, 5, 9, 10, 11, 14, 15, 19, 20, 21, 21, 24, 24, 25], 1),
-            ([4, 5, 14, 16, 19, 20, 23, 25, 25, 26, 26, 26, 28, 29], 2),
-            ([0, 1, 1, 6, 7, 7, 8, 12, 16, 20, 22, 31, 33, 33], 3),
-            ([4, 5, 5, 7, 10, 11, 12, 14, 19, 21, 22, 24, 25, 29], 3),
-            ([0, 1, 1, 2, 6, 6, 7, 7, 12, 13, 14, 19, 29, 29], 1),
-            ([1, 3, 5, 6, 7, 8, 8, 16, 17, 21, 22, 23, 23, 24], 1),
-            ([9, 12, 13, 14, 15, 16, 16, 23, 25, 27, 28, 29, 32, 33], 4),
-            ([2, 3, 4, 11, 12, 13, 16, 16, 16, 20, 22, 25, 25, 27], 0),
-            ([1, 5, 5, 6, 8, 9, 20, 20, 20, 21, 22, 24, 27, 30], 3),
-            ([1, 3, 4, 4, 9, 15, 16, 17, 18, 18, 20, 22, 25, 27], 2),
-            ([4, 5, 6, 7, 8, 9, 10, 11, 14, 16, 20, 24, 28, 33], 2),
-            ([5, 7, 11, 12, 13, 14, 14, 15, 16, 16, 21, 23, 26, 30], 2),
-            ([4, 5, 9, 12, 14, 15, 15, 16, 16, 16, 18, 18, 24, 28], 2),
-            ([0, 1, 3, 4, 5, 14, 15, 17, 18, 20, 21, 23, 33, 33], 2),
-            ([1, 3, 4, 6, 6, 8, 10, 11, 15, 18, 19, 26, 33, 33], 3),
-            ([1, 5, 7, 8, 8, 10, 11, 14, 15, 20, 21, 24, 24, 25], 3),
-            ([1, 2, 7, 8, 8, 9, 13, 16, 17, 21, 21, 22, 23, 23], 2),
-            ([3, 8, 8, 11, 14, 15, 15, 16, 20, 20, 22, 23, 26, 32], 3),
-            ([2, 3, 12, 13, 14, 15, 17, 20, 20, 22, 27, 30, 31, 31], 2),
-            ([5, 5, 6, 6, 13, 16, 16, 17, 18, 18, 19, 19, 20, 26], 2),
-            ([0, 1, 6, 6, 6, 11, 13, 17, 22, 24, 27, 31, 32, 33], 3),
-            ([1, 2, 3, 12, 13, 13, 13, 14, 16, 17, 20, 20, 22, 23], 1),
-            ([1, 1, 6, 6, 7, 15, 15, 20, 20, 22, 22, 25, 29, 31], 3),
-            ([6, 7, 8, 8, 9, 10, 10, 15, 17, 25, 26, 31, 33, 33], 2),
-            ([0, 2, 4, 9, 11, 16, 23, 25, 28, 30, 31, 31, 32, 33], 4),
-            ([1, 1, 2, 9, 11, 16, 18, 24, 25, 26, 28, 31, 31, 33], 3),
-            ([2, 3, 5, 6, 10, 14, 15, 16, 19, 20, 21, 25, 25, 26], 1),
-            ([3, 4, 7, 7, 10, 10, 13, 15, 18, 19, 20, 26, 32, 32], 2),
-            ([1, 5, 9, 10, 10, 12, 16, 18, 19, 20, 27, 28, 32, 33], 4),
-            ([0, 0, 4, 10, 10, 12, 14, 14, 16, 18, 22, 24, 32, 33], 3),
-            ([2, 3, 3, 4, 4, 13, 14, 19, 19, 21, 23, 23, 24, 30], 2),
-            ([4, 6, 8, 9, 10, 12, 14, 17, 19, 23, 25, 28, 28, 29], 3),
-            ([6, 8, 8, 10, 13, 14, 16, 17, 20, 21, 27, 31, 31, 32], 3),
-            ([1, 2, 4, 6, 8, 21, 22, 23, 23, 24, 25, 25, 25, 32], 1),
-            ([2, 3, 5, 6, 13, 17, 19, 19, 21, 24, 25, 28, 29, 31], 4),
-            ([4, 4, 6, 6, 7, 12, 14, 19, 20, 20, 26, 28, 31, 32], 4),
-            ([1, 3, 4, 5, 6, 11, 12, 13, 19, 21, 21, 23, 28, 28], 1),
-            ([4, 4, 5, 11, 12, 19, 19, 20, 20, 21, 21, 23, 29, 32], 2),
-            ([2, 7, 8, 10, 11, 12, 13, 14, 16, 16, 17, 21, 22, 33], 2),
-            ([1, 2, 7, 8, 9, 11, 15, 15, 16, 19, 20, 21, 22, 29], 2),
-            ([1, 10, 14, 16, 19, 20, 22, 23, 23, 24, 27, 31, 31, 32], 3),
-            ([1, 3, 5, 9, 9, 10, 11, 11, 21, 22, 23, 23, 28, 28], 1),
-            ([1, 3, 6, 7, 8, 10, 11, 16, 16, 16, 18, 19, 20, 31], 1),
-            ([5, 7, 9, 9, 14, 15, 16, 19, 20, 21, 22, 23, 24, 26], 0),
-            ([3, 6, 7, 14, 15, 16, 17, 20, 21, 22, 24, 25, 31, 32], 2),
-            ([3, 5, 7, 13, 14, 14, 18, 18, 19, 20, 20, 22, 24, 25], 2),
-            ([4, 7, 16, 19, 19, 19, 20, 20, 21, 22, 24, 25, 31, 32], 3),
-            ([0, 1, 2, 4, 13, 19, 21, 22, 24, 24, 25, 25, 26, 26], 1),
-            ([2, 3, 3, 5, 7, 14, 22, 23, 23, 24, 25, 26, 28, 28], 2),
-            ([1, 1, 1, 3, 3, 3, 5, 5, 18, 19, 20, 20, 21, 29], 0),
-            ([1, 4, 8, 12, 14, 17, 19, 19, 22, 24, 27, 29, 31, 33], 5),
-            ([2, 3, 4, 4, 6, 6, 7, 7, 21, 22, 23, 23, 24, 27], 1),
-            ([2, 4, 7, 8, 8, 11, 14, 18, 20, 29, 30, 32, 32, 33], 4),
-            ([2, 4, 5, 7, 8, 12, 13, 14, 15, 19, 22, 27, 29, 29], 3),
-            ([3, 4, 4, 5, 6, 11, 13, 15, 15, 20, 22, 23, 24, 27], 1),
-            ([2, 3, 4, 4, 7, 8, 10, 11, 13, 14, 19, 21, 22, 23], 2),
-            ([2, 4, 6, 7, 13, 14, 14, 16, 16, 24, 25, 26, 26, 32], 2),
-            ([1, 2, 5, 6, 9, 9, 9, 16, 18, 18, 19, 19, 20, 20], 1),
-            ([0, 1, 1, 4, 7, 8, 14, 15, 16, 17, 19, 23, 27, 32], 4),
-            ([0, 3, 4, 6, 8, 9, 9, 10, 12, 14, 14, 24, 24, 26], 3),
-            ([1, 2, 2, 3, 6, 6, 7, 8, 8, 10, 10, 13, 22, 25], 2),
-            ([2, 2, 5, 5, 5, 11, 12, 13, 14, 20, 21, 22, 23, 24], 0),
-            ([3, 4, 5, 5, 6, 7, 14, 16, 18, 19, 20, 21, 21, 25], 0),
-            ([0, 1, 4, 5, 7, 13, 13, 15, 15, 16, 16, 23, 28, 29], 3),
-            ([4, 8, 9, 10, 11, 14, 18, 20, 21, 23, 24, 28, 29, 33], 4),
-            ([2, 3, 4, 9, 10, 11, 11, 15, 16, 21, 21, 24, 25, 31], 1),
-            ([1, 4, 4, 5, 6, 6, 9, 14, 16, 16, 24, 27, 30, 32], 4),
-            ([1, 4, 5, 5, 5, 8, 10, 12, 13, 25, 32, 32, 32, 33], 3),
-            ([0, 2, 5, 6, 8, 11, 11, 12, 17, 18, 21, 23, 23, 31], 4),
-            ([1, 2, 3, 10, 10, 12, 12, 13, 16, 16, 16, 22, 23, 29], 1),
-            ([0, 1, 1, 2, 4, 5, 8, 14, 14, 24, 25, 28, 28, 29], 2),
-            ([7, 7, 8, 9, 10, 11, 11, 12, 16, 21, 22, 31, 31, 32], 2),
-            ([1, 2, 5, 6, 14, 15, 19, 20, 20, 21, 21, 25, 25, 29], 2),
-            ([6, 6, 9, 10, 11, 13, 13, 14, 24, 24, 28, 29, 30, 31], 3),
-            ([0, 1, 6, 7, 11, 13, 14, 15, 16, 23, 25, 26, 27, 27], 2),
-            ([4, 6, 7, 15, 16, 17, 18, 19, 19, 22, 26, 29, 29, 32], 3),
-            ([0, 4, 4, 11, 12, 14, 18, 19, 21, 26, 29, 31, 31, 33], 4),
-            ([0, 1, 1, 5, 10, 15, 15, 19, 20, 21, 23, 27, 30, 33], 4),
-            ([1, 3, 4, 5, 7, 9, 11, 12, 19, 19, 22, 24, 28, 31], 3),
-            ([0, 0, 2, 6, 13, 14, 16, 16, 20, 22, 27, 32, 32, 33], 3),
-            ([4, 4, 5, 10, 10, 20, 20, 21, 21, 23, 23, 25, 25, 26], 3),
-            ([0, 0, 1, 3, 4, 10, 10, 10, 19, 20, 21, 24, 25, 26], 0),
-            ([2, 5, 8, 9, 12, 13, 16, 17, 18, 20, 24, 26, 32, 32], 3),
-            ([1, 2, 3, 4, 5, 6, 9, 12, 14, 16, 16, 18, 25, 32], 2),
-            ([10, 10, 11, 12, 12, 13, 14, 14, 16, 21, 22, 29, 29, 29], 1),
-            ([0, 3, 10, 17, 21, 22, 25, 27, 27, 28, 29, 29, 31, 33], 5),
-            ([0, 0, 2, 5, 7, 11, 13, 13, 13, 24, 25, 28, 31, 33], 3),
-            ([2, 8, 8, 9, 13, 15, 15, 17, 21, 22, 23, 23, 23, 25], 2),
-            ([7, 18, 20, 22, 23, 24, 26, 27, 28, 29, 31, 32, 33, 33], 4),
-            ([0, 1, 2, 3, 4, 4, 5, 14, 15, 16, 20, 21, 33, 33], 0),
-            ([3, 10, 15, 17, 18, 20, 21, 22, 25, 25, 26, 28, 30, 32], 4),
-            ([4, 6, 9, 12, 14, 14, 14, 17, 22, 22, 26, 29, 29, 32], 3),
-            ([4, 4, 7, 10, 11, 13, 13, 21, 22, 23, 23, 23, 25, 27], 2),
-            ([0, 2, 5, 13, 15, 20, 22, 24, 26, 26, 27, 27, 31, 33], 3),
-            ([0, 0, 0, 4, 6, 12, 13, 13, 21, 22, 25, 25, 33, 33], 2),
-            ([2, 3, 5, 6, 7, 10, 12, 12, 16, 20, 23, 25, 32, 33], 3),
-            ([0, 1, 7, 8, 12, 13, 20, 21, 26, 27, 28, 31, 32, 33], 4),
-            ([0, 1, 7, 7, 8, 10, 11, 17, 18, 19, 20, 23, 25, 33], 2),
-            ([0, 0, 1, 1, 2, 13, 15, 18, 19, 20, 21, 30, 31, 31], 1),
-            ([0, 0, 2, 6, 6, 8, 8, 13, 14, 14, 16, 22, 27, 29], 3),
-            ([2, 2, 8, 11, 13, 15, 15, 16, 19, 23, 24, 28, 28, 28], 2),
-            ([0, 0, 1, 5, 7, 11, 13, 15, 15, 16, 17, 23, 24, 24], 2),
-            ([4, 5, 8, 14, 16, 17, 19, 21, 23, 26, 27, 28, 29, 31], 5),
-            ([1, 1, 3, 3, 6, 7, 7, 14, 14, 17, 21, 22, 30, 31], 3),
-            ([3, 3, 5, 9, 18, 20, 22, 22, 23, 24, 24, 25, 27, 27], 2),
-            ([3, 4, 5, 6, 7, 16, 17, 23, 24, 26, 27, 27, 30, 30], 2),
-            ([5, 6, 6, 12, 12, 14, 14, 15, 15, 16, 24, 24, 25, 25], 2),
-            ([1, 3, 6, 7, 7, 8, 10, 15, 19, 26, 26, 28, 30, 32], 4),
-            ([0, 1, 6, 7, 8, 10, 12, 18, 19, 21, 22, 26, 29, 33], 3),
-            ([3, 4, 4, 9, 10, 11, 11, 14, 15, 22, 22, 25, 26, 26], 2),
-            ([1, 1, 3, 13, 14, 15, 15, 16, 17, 20, 21, 22, 26, 26], 0),
-            ([3, 5, 5, 9, 14, 15, 16, 17, 17, 19, 19, 20, 30, 30], 2),
-            ([3, 4, 5, 6, 7, 7, 8, 9, 10, 11, 12, 12, 20, 21], 0),
-            ([1, 2, 2, 7, 9, 9, 10, 19, 19, 19, 21, 21, 27, 31], 3),
-            ([0, 3, 6, 8, 12, 15, 15, 16, 18, 19, 20, 22, 29, 29], 3),
-            ([3, 7, 8, 8, 13, 15, 21, 21, 28, 28, 31, 32, 33, 33], 3),
-            ([1, 3, 13, 13, 14, 15, 15, 16, 17, 22, 23, 24, 25, 28], 1),
-            ([3, 4, 6, 7, 7, 16, 21, 22, 23, 23, 25, 25, 27, 33], 3),
-            ([5, 11, 12, 12, 13, 14, 20, 22, 25, 26, 26, 28, 28, 33], 2),
-            ([2, 3, 4, 4, 4, 5, 6, 6, 9, 10, 11, 21, 22, 23], 0),
-            ([4, 5, 6, 6, 14, 14, 14, 19, 21, 23, 23, 27, 30, 30], 1),
-            ([1, 1, 12, 12, 14, 16, 21, 22, 23, 25, 25, 29, 31, 31], 2),
-            ([0, 1, 8, 10, 11, 13, 13, 19, 20, 25, 25, 25, 27, 28], 2),
-            ([6, 8, 9, 9, 10, 11, 11, 13, 17, 21, 24, 25, 25, 28], 3),
-            ([5, 7, 13, 14, 14, 15, 16, 18, 19, 20, 23, 23, 25, 25], 1),
-            ([3, 5, 9, 10, 11, 12, 19, 20, 21, 22, 22, 23, 24, 25], 0),
-            ([0, 0, 2, 2, 4, 7, 8, 13, 14, 20, 21, 25, 26, 26], 3),
-            ([0, 2, 3, 3, 4, 6, 7, 8, 19, 20, 21, 23, 25, 27], 1),
-            ([0, 0, 2, 7, 16, 16, 19, 20, 21, 23, 25, 27, 33, 33], 2),
-            ([4, 4, 5, 7, 7, 11, 14, 20, 21, 22, 23, 25, 29, 30], 3),
-            ([2, 4, 7, 8, 9, 10, 11, 12, 13, 15, 18, 24, 27, 31], 3),
-            ([2, 3, 4, 4, 5, 11, 12, 20, 21, 22, 23, 23, 25, 27], 1),
-            ([3, 3, 4, 6, 6, 7, 9, 10, 11, 15, 25, 29, 31, 32], 3),
-            ([2, 6, 8, 9, 9, 10, 11, 13, 19, 21, 24, 30, 30, 33], 3),
-            ([0, 0, 1, 2, 4, 5, 7, 7, 10, 11, 13, 16, 24, 27], 3),
-            ([0, 4, 8, 11, 14, 16, 17, 17, 18, 18, 21, 27, 32, 33], 5),
-            ([3, 4, 5, 6, 6, 10, 11, 12, 19, 20, 23, 23, 24, 25], 0),
-            ([4, 9, 9, 10, 13, 16, 22, 25, 25, 26, 27, 31, 32, 33], 6),
-            ([2, 5, 6, 14, 15, 17, 17, 19, 20, 22, 24, 27, 27, 28], 3),
-            ([0, 0, 2, 4, 7, 7, 11, 13, 14, 15, 17, 19, 24, 25], 2),
-            ([4, 4, 5, 5, 11, 14, 15, 18, 19, 20, 20, 23, 26, 26], 2),
-            ([0, 8, 8, 10, 14, 17, 20, 21, 21, 22, 23, 24, 29, 33], 4),
-            ([4, 6, 9, 11, 13, 13, 22, 24, 26, 27, 30, 31, 32, 32], 3),
-            ([0, 5, 6, 6, 6, 7, 11, 12, 14, 15, 16, 22, 23, 24], 0),
-            ([2, 2, 6, 7, 8, 10, 12, 13, 14, 15, 17, 17, 22, 25], 1),
-            ([0, 8, 8, 9, 11, 11, 14, 14, 17, 17, 21, 23, 25, 29], 3),
-            ([3, 3, 4, 6, 11, 12, 12, 15, 17, 17, 20, 20, 32, 32], 3),
-            ([1, 1, 4, 5, 7, 14, 15, 16, 21, 22, 27, 31, 31, 31], 1),
-            ([0, 1, 2, 4, 5, 6, 6, 7, 8, 8, 9, 10, 21, 22], 1),
-            ([2, 3, 3, 4, 5, 9, 10, 10, 15, 16, 24, 26, 26, 26], 1),
-            ([3, 4, 5, 6, 6, 7, 11, 12, 14, 15, 18, 20, 22, 32], 2),
-            ([0, 1, 2, 2, 6, 7, 13, 17, 18, 18, 19, 22, 24, 25], 3),
-            ([1, 3, 12, 12, 14, 15, 16, 18, 19, 20, 29, 32, 32, 32], 0),
-            ([0, 5, 10, 10, 14, 16, 17, 18, 19, 20, 25, 29, 31, 33], 4),
-            ([0, 1, 2, 5, 6, 8, 8, 15, 16, 16, 22, 28, 31, 33], 3),
-            ([0, 1, 1, 2, 2, 17, 17, 17, 18, 22, 23, 23, 24, 25], 1),
-            ([3, 8, 10, 10, 13, 13, 18, 20, 20, 21, 27, 28, 31, 31], 3),
-            ([1, 1, 3, 5, 10, 12, 13, 15, 16, 20, 21, 22, 26, 26], 2),
-            ([1, 2, 3, 4, 6, 8, 12, 14, 15, 16, 17, 19, 19, 25], 1),
-            ([3, 4, 5, 6, 7, 8, 12, 13, 14, 17, 17, 18, 19, 20], -1),
-            ([0, 3, 4, 4, 7, 8, 12, 12, 13, 16, 21, 22, 24, 28], 4),
-            ([4, 4, 6, 7, 7, 11, 12, 14, 14, 21, 22, 22, 30, 30], 3),
-            ([1, 3, 3, 11, 11, 13, 13, 14, 15, 16, 18, 19, 20, 27], 1),
-            ([4, 7, 12, 14, 16, 17, 17, 22, 23, 25, 25, 26, 30, 30], 3),
-            ([2, 3, 3, 8, 8, 14, 17, 18, 18, 19, 20, 22, 23, 28], 3),
-            ([3, 4, 9, 10, 10, 13, 14, 18, 19, 19, 20, 21, 22, 24], 2),
-            ([4, 4, 6, 7, 8, 10, 11, 14, 18, 21, 22, 24, 25, 26], 1),
-            ([2, 2, 3, 5, 5, 7, 7, 7, 19, 19, 20, 24, 25, 26], 1),
-            ([0, 1, 2, 6, 8, 10, 12, 18, 21, 22, 23, 23, 24, 25], 1),
-            ([1, 4, 5, 5, 5, 8, 10, 12, 13, 25, 27, 32, 32, 32], 3),
-            ([0, 1, 2, 7, 8, 8, 8, 12, 13, 18, 20, 20, 21, 22], 1),
-            ([10, 11, 14, 15, 16, 18, 19, 20, 22, 22, 23, 24, 25, 27], 0),
-            ([2, 3, 4, 8, 12, 13, 13, 15, 17, 19, 23, 24, 25, 32], 2),
-            ([1, 3, 5, 13, 14, 15, 15, 16, 17, 20, 21, 22, 26, 26], 0),
-            ([2, 8, 9, 9, 11, 11, 13, 15, 22, 25, 26, 26, 26, 32], 3),
-            ([1, 2, 5, 6, 9, 10, 13, 14, 15, 17, 20, 21, 24, 27], 3),
-            ([10, 11, 13, 13, 13, 16, 16, 16, 18, 19, 21, 23, 25, 32], 2),
-            ([3, 3, 7, 10, 10, 11, 12, 14, 15, 16, 21, 23, 24, 25], 1),
-            ([4, 5, 6, 8, 8, 9, 13, 13, 13, 14, 15, 21, 22, 23], 0),
-            ([3, 3, 3, 5, 5, 5, 10, 12, 19, 21, 22, 24, 25, 26], 1),
-            ([6, 6, 11, 12, 13, 16, 16, 18, 20, 22, 22, 24, 25, 28], 2),
-            ([0, 0, 1, 2, 3, 3, 5, 7, 11, 13, 15, 18, 19, 21], 2),
-            ([6, 6, 7, 8, 9, 11, 14, 15, 16, 18, 20, 24, 26, 31], 2),
-            ([0, 0, 1, 3, 4, 5, 9, 9, 16, 21, 23, 24, 25, 32], 2),
-            ([2, 4, 9, 9, 11, 12, 15, 16, 20, 21, 22, 24, 25, 30], 2),
-            ([4, 5, 5, 13, 14, 15, 16, 16, 22, 23, 24, 24, 24, 25], 1),
-            ([5, 5, 10, 11, 18, 18, 18, 20, 21, 22, 23, 32, 32, 32], 0),
-            ([0, 2, 4, 5, 7, 7, 9, 10, 11, 21, 22, 24, 25, 29], 2),
-            ([1, 3, 4, 8, 13, 14, 14, 15, 21, 26, 27, 30, 30, 33], 4),
-            ([1, 2, 2, 3, 6, 6, 11, 12, 13, 19, 20, 24, 25, 26], 0),
-            ([2, 4, 9, 9, 10, 12, 17, 18, 22, 25, 30, 32, 32, 33], 4),
-            ([3, 6, 8, 13, 20, 20, 21, 23, 24, 24, 26, 26, 26, 32], 2),
-            ([0, 0, 1, 2, 7, 8, 10, 14, 14, 17, 18, 19, 19, 32], 3),
-            ([1, 1, 2, 6, 7, 8, 8, 12, 12, 21, 25, 26, 27, 33], 3),
-            ([7, 9, 9, 10, 15, 16, 22, 22, 23, 24, 24, 24, 30, 30], 2),
-            ([7, 9, 12, 12, 13, 14, 16, 17, 19, 20, 22, 24, 31, 32], 3),
-            ([1, 4, 5, 10, 12, 14, 16, 16, 16, 21, 23, 24, 26, 32], 3),
-            ([1, 4, 7, 9, 9, 11, 13, 15, 16, 18, 21, 26, 31, 32], 5),
-            ([3, 7, 9, 11, 12, 15, 21, 22, 22, 27, 28, 30, 31, 33], 6),
-            ([4, 12, 14, 15, 18, 19, 22, 23, 25, 27, 30, 30, 31, 32], 4),
-            ([0, 0, 2, 5, 6, 7, 12, 14, 15, 21, 22, 23, 29, 32], 2),
-            ([1, 2, 2, 4, 5, 6, 12, 13, 20, 20, 20, 25, 29, 29], 1),
-            ([4, 6, 7, 8, 10, 13, 15, 16, 22, 24, 25, 26, 29, 29], 2),
-            ([1, 2, 10, 12, 12, 13, 14, 20, 21, 23, 23, 23, 33, 33], 1),
-            ([1, 4, 5, 9, 10, 12, 12, 19, 20, 25, 26, 28, 30, 32], 3),
-            ([6, 11, 11, 12, 12, 13, 22, 22, 22, 23, 24, 24, 25, 26], 0),
-            ([0, 1, 1, 4, 6, 7, 8, 8, 8, 11, 13, 21, 23, 27], 2),
-            ([2, 3, 5, 6, 7, 8, 11, 12, 13, 14, 14, 15, 19, 24], 2),
-            ([4, 4, 6, 7, 11, 12, 16, 21, 22, 24, 24, 25, 29, 29], 3),
-            ([3, 6, 7, 8, 8, 9, 11, 11, 12, 12, 13, 16, 27, 29], 3),
-            ([2, 3, 4, 4, 5, 10, 12, 20, 21, 23, 24, 28, 28, 30], 2),
-            ([5, 8, 8, 12, 13, 15, 15, 18, 19, 20, 20, 21, 29, 31], 2),
-            ([7, 7, 11, 11, 14, 14, 15, 16, 16, 19, 19, 24, 28, 30], 2),
-            ([1, 2, 3, 4, 4, 5, 9, 9, 11, 21, 22, 23, 33, 33], 1),
-            ([0, 1, 3, 3, 3, 5, 10, 15, 16, 17, 22, 25, 26, 32], 2),
-            ([10, 11, 12, 13, 13, 13, 18, 18, 23, 24, 25, 31, 33, 33], 0),
-            ([1, 2, 2, 4, 4, 5, 6, 7, 20, 20, 21, 21, 22, 32], 1),
-            ([2, 3, 4, 4, 9, 15, 16, 18, 21, 21, 22, 23, 28, 30], 3),
-            ([1, 2, 3, 4, 7, 10, 11, 12, 16, 19, 19, 21, 30, 30], 2),
-            ([1, 9, 9, 10, 15, 16, 22, 23, 24, 24, 25, 30, 30, 33], 2),
-            ([1, 2, 3, 5, 6, 8, 9, 22, 23, 24, 24, 28, 31, 33], 3),
-            ([1, 3, 5, 11, 11, 11, 12, 12, 14, 15, 15, 15, 15, 16], 0),
-            ([2, 2, 3, 9, 13, 13, 14, 15, 20, 24, 25, 27, 30, 31], 4),
-            ([1, 1, 2, 3, 4, 5, 10, 10, 13, 13, 25, 26, 31, 33], 2),
-            ([0, 7, 8, 9, 11, 12, 13, 13, 15, 21, 25, 26, 28, 32], 3),
-            ([5, 7, 7, 10, 10, 12, 13, 14, 14, 16, 20, 20, 25, 30], 2),
-            ([0, 0, 2, 5, 7, 13, 15, 16, 22, 23, 24, 30, 30, 30], 1),
-            ([1, 2, 4, 6, 6, 7, 7, 8, 13, 14, 15, 26, 29, 29], 1),
-            ([3, 4, 4, 6, 7, 10, 14, 20, 21, 22, 24, 25, 26, 32], 2),
-            ([1, 5, 12, 13, 16, 17, 21, 21, 22, 23, 23, 24, 26, 31], 3),
-            ([2, 3, 4, 12, 13, 15, 15, 20, 22, 23, 23, 27, 30, 32], 2),
-            ([4, 4, 6, 6, 7, 8, 11, 18, 20, 21, 22, 23, 24, 25], 1),
-            ([1, 1, 3, 6, 7, 8, 14, 18, 19, 20, 22, 27, 33, 33], 2),
-            ([3, 5, 8, 9, 13, 15, 16, 17, 19, 21, 26, 27, 28, 30], 4),
-            ([12, 13, 14, 18, 18, 18, 19, 19, 21, 22, 23, 23, 24, 25], -1),
-            ([1, 1, 2, 3, 8, 8, 12, 14, 16, 18, 19, 20, 20, 22], 1),
-            ([2, 3, 4, 4, 5, 6, 7, 14, 15, 16, 23, 23, 24, 25], 0),
-            ([2, 3, 4, 5, 5, 10, 11, 12, 15, 16, 25, 25, 27, 31], 1),
-            ([2, 6, 6, 13, 16, 16, 17, 17, 18, 19, 22, 23, 24, 27], 2),
-            ([0, 2, 2, 8, 8, 11, 13, 14, 15, 20, 24, 30, 30, 31], 3),
-            ([2, 3, 3, 4, 4, 5, 11, 12, 13, 19, 19, 23, 24, 25], -1),
-            ([0, 1, 2, 7, 7, 7, 12, 13, 14, 15, 16, 16, 16, 27], 0),
-            ([0, 4, 4, 4, 5, 10, 11, 16, 17, 17, 22, 22, 24, 24], 2),
-            ([0, 2, 2, 5, 6, 7, 9, 10, 11, 21, 21, 22, 23, 24], 0),
-            ([4, 6, 6, 9, 10, 22, 22, 24, 24, 25, 26, 28, 31, 32], 3),
-            ([2, 9, 10, 11, 15, 16, 17, 18, 22, 26, 31, 31, 32, 33], 3),
-            ([0, 4, 5, 7, 12, 15, 15, 17, 18, 19, 24, 27, 29, 33], 5),
-            ([1, 2, 2, 3, 8, 8, 10, 15, 16, 20, 20, 24, 26, 28], 2),
-            ([5, 6, 7, 9, 10, 11, 11, 14, 14, 16, 23, 25, 32, 32], 1),
-            ([3, 4, 6, 6, 7, 11, 11, 12, 16, 18, 18, 19, 30, 30], 3),
-            ([4, 4, 5, 5, 8, 11, 12, 15, 18, 19, 19, 20, 27, 31], 3),
-            ([4, 6, 7, 8, 12, 14, 15, 18, 24, 25, 25, 26, 28, 28], 2),
-            ([1, 1, 3, 11, 12, 13, 15, 15, 17, 18, 19, 24, 25, 26], 1),
-            ([0, 0, 1, 7, 8, 10, 12, 19, 21, 21, 21, 24, 25, 26], 1),
-            ([1, 3, 4, 6, 8, 11, 12, 13, 13, 14, 14, 15, 21, 21], 1),
-            ([10, 13, 14, 14, 15, 15, 16, 17, 18, 18, 19, 29, 30, 32], 3),
-            ([6, 6, 10, 13, 13, 15, 15, 21, 21, 23, 26, 27, 27, 32], 3),
-            ([0, 2, 3, 6, 8, 9, 10, 13, 16, 17, 23, 25, 27, 31], 4),
-            ([0, 1, 3, 5, 5, 11, 15, 18, 19, 20, 21, 25, 26, 29], 3),
-            ([0, 2, 2, 3, 4, 4, 5, 15, 16, 20, 21, 21, 22, 23], 1),
-            ([1, 5, 10, 12, 12, 14, 17, 19, 20, 22, 26, 27, 30, 32], 5),
-            ([1, 2, 2, 5, 7, 9, 11, 16, 22, 23, 25, 26, 28, 33], 3),
-            ([0, 1, 2, 5, 17, 17, 18, 19, 19, 19, 22, 23, 33, 33], 1),
-            ([4, 7, 7, 10, 11, 11, 12, 16, 17, 17, 21, 25, 25, 25], 2),
-            ([1, 3, 3, 7, 9, 10, 19, 20, 24, 24, 25, 26, 31, 32], 3),
-            ([1, 3, 7, 11, 15, 16, 17, 23, 23, 24, 25, 28, 33, 33], 2),
-            ([0, 4, 4, 6, 6, 12, 13, 15, 16, 18, 18, 19, 21, 22], 3),
-            ([3, 4, 15, 15, 16, 17, 20, 21, 22, 24, 24, 26, 32, 32], 1),
-            ([1, 1, 2, 4, 5, 9, 10, 11, 12, 15, 15, 20, 22, 24], 2),
-            ([3, 3, 6, 16, 16, 21, 22, 25, 26, 26, 28, 28, 29, 32], 3),
-            ([2, 2, 5, 6, 7, 12, 13, 15, 16, 17, 18, 23, 23, 24], 1),
-            ([1, 2, 2, 4, 5, 5, 13, 14, 15, 15, 18, 19, 19, 21], 2),
-            ([8, 9, 10, 11, 13, 14, 15, 16, 17, 19, 19, 27, 27, 27], 0),
-            ([1, 2, 6, 17, 18, 19, 20, 23, 24, 25, 26, 26, 32, 32], 1),
-            ([4, 4, 4, 6, 9, 9, 11, 13, 13, 20, 23, 24, 30, 31], 3),
-            ([8, 10, 13, 13, 14, 18, 20, 22, 25, 26, 27, 27, 31, 33], 4),
-            ([12, 13, 18, 18, 20, 21, 21, 22, 23, 24, 25, 26, 29, 29], 1),
-            ([6, 6, 7, 7, 10, 12, 12, 14, 15, 16, 19, 21, 23, 29], 2),
-            ([1, 2, 2, 5, 7, 9, 9, 11, 13, 14, 14, 23, 31, 31], 3),
-            ([6, 8, 12, 13, 14, 16, 17, 17, 20, 25, 25, 26, 26, 26], 1),
-            ([0, 4, 7, 7, 12, 18, 20, 20, 20, 21, 28, 28, 30, 31], 4),
-            ([1, 3, 3, 5, 13, 14, 14, 15, 18, 19, 20, 23, 29, 29], 1),
-            ([5, 8, 10, 11, 12, 12, 14, 14, 15, 21, 27, 31, 33, 33], 3),
-            ([1, 2, 3, 4, 5, 6, 6, 10, 11, 12, 15, 16, 17, 21], 0),
-            ([3, 4, 5, 6, 8, 12, 16, 16, 17, 21, 23, 28, 29, 32], 3),
-            ([0, 2, 3, 6, 7, 9, 10, 10, 13, 21, 23, 28, 29, 33], 4),
-            ([7, 8, 12, 14, 17, 17, 20, 21, 21, 22, 22, 23, 24, 26], 1),
-            ([5, 5, 7, 7, 7, 13, 15, 17, 19, 21, 27, 28, 32, 33], 3),
-            ([3, 5, 10, 10, 12, 14, 18, 19, 21, 23, 25, 27, 30, 32], 3),
-            ([2, 2, 2, 5, 6, 6, 7, 16, 16, 21, 23, 24, 25, 30], 1),
-            ([1, 1, 3, 3, 6, 7, 8, 11, 12, 12, 14, 15, 18, 20], 2),
-            ([3, 4, 7, 10, 10, 10, 12, 13, 16, 19, 19, 22, 24, 24], 2),
-            ([0, 0, 1, 1, 2, 2, 4, 21, 21, 22, 23, 23, 31, 31], 0),
-            ([2, 3, 3, 6, 7, 10, 14, 16, 28, 28, 29, 30, 32, 33], 4),
-            ([0, 0, 1, 2, 3, 4, 4, 5, 20, 20, 22, 23, 23, 24], 1),
-            ([1, 2, 2, 2, 14, 16, 17, 21, 21, 22, 22, 23, 27, 28], 2),
-            ([1, 2, 3, 10, 12, 13, 14, 15, 18, 19, 20, 20, 21, 22], 0),
-            ([3, 11, 12, 13, 16, 17, 19, 20, 22, 22, 23, 30, 30, 32], 2),
-            ([5, 6, 7, 12, 13, 14, 15, 15, 17, 17, 22, 25, 25, 26], 1),
-            ([3, 3, 3, 3, 5, 7, 13, 15, 20, 21, 25, 28, 29, 30], 3),
-            ([1, 1, 3, 6, 7, 8, 14, 18, 19, 20, 22, 27, 33, 33], 2),
-            ([2, 3, 4, 5, 6, 6, 7, 7, 7, 8, 15, 17, 19, 19], 0),
-            ([0, 3, 10, 10, 11, 14, 15, 16, 17, 19, 21, 27, 29, 33], 4),
-            ([1, 2, 4, 6, 7, 14, 15, 15, 16, 20, 22, 32, 32, 32], 2),
-            ([5, 5, 7, 11, 12, 14, 14, 14, 19, 21, 22, 24, 29, 31], 2),
-            ([3, 4, 6, 7, 8, 9, 11, 12, 14, 16, 17, 17, 18, 20], 2),
-            ([2, 6, 9, 10, 11, 12, 16, 17, 17, 20, 22, 28, 29, 30], 4),
-            ([2, 4, 5, 6, 6, 7, 7, 10, 10, 13, 13, 19, 22, 23], 2),
-            ([3, 4, 5, 6, 6, 7, 18, 19, 20, 23, 24, 24, 30, 30], 1),
-            ([0, 3, 7, 7, 10, 13, 15, 16, 16, 19, 20, 23, 23, 25], 3),
-            ([3, 4, 4, 6, 7, 10, 14, 21, 22, 24, 25, 26, 31, 32], 3),
-            ([4, 5, 7, 8, 10, 20, 21, 21, 22, 22, 26, 31, 32, 32], 2),
-            ([0, 4, 6, 9, 9, 11, 15, 15, 17, 21, 22, 23, 26, 29], 3),
-            ([5, 6, 12, 13, 15, 18, 20, 21, 21, 22, 22, 23, 25, 25], 1),
-            ([0, 2, 3, 4, 4, 5, 6, 9, 10, 11, 21, 21, 22, 23], 0),
-            ([0, 5, 7, 9, 11, 13, 14, 21, 22, 25, 25, 27, 30, 31], 3),
-            ([4, 4, 5, 6, 6, 7, 11, 13, 15, 20, 20, 20, 23, 25], 1),
-            ([2, 3, 6, 8, 10, 10, 11, 12, 12, 12, 14, 22, 22, 25], 2),
-            ([2, 3, 4, 6, 10, 12, 13, 15, 17, 18, 19, 23, 24, 28], 3),
-            ([2, 6, 8, 10, 12, 15, 16, 19, 20, 20, 21, 22, 25, 26], 3),
-            ([2, 8, 8, 8, 9, 9, 10, 18, 18, 24, 25, 26, 30, 30], 1),
-            ([4, 4, 6, 7, 10, 10, 12, 15, 16, 17, 21, 25, 27, 27], 2),
-            ([2, 3, 6, 9, 11, 14, 15, 20, 21, 24, 25, 27, 27, 28], 3),
-            ([4, 5, 8, 11, 12, 13, 16, 16, 19, 21, 21, 22, 24, 26], 2),
-            ([1, 3, 5, 11, 12, 12, 15, 16, 17, 20, 22, 23, 30, 33], 3),
-            ([0, 1, 2, 3, 4, 13, 13, 14, 15, 16, 22, 23, 24, 24], 0),
-            ([1, 3, 9, 9, 13, 15, 15, 21, 21, 22, 22, 23, 27, 28], 2),
-            ([2, 11, 12, 14, 14, 15, 19, 23, 23, 25, 30, 30, 32, 32], 3),
-            ([2, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 19, 25, 33], 3),
-            ([2, 3, 4, 6, 6, 8, 8, 9, 9, 12, 13, 19, 20, 21], 1),
-            ([3, 3, 4, 4, 9, 10, 11, 13, 22, 26, 31, 31, 32, 32], 2),
-            ([1, 3, 3, 3, 10, 11, 12, 12, 13, 20, 23, 24, 25, 26], 1),
-            ([2, 3, 5, 5, 9, 11, 12, 12, 18, 19, 23, 24, 25, 32], 2),
-            ([0, 0, 2, 7, 10, 11, 11, 14, 18, 24, 29, 29, 32, 32], 4),
-            ([9, 9, 10, 13, 13, 14, 15, 16, 17, 24, 25, 26, 31, 31], 1),
-            ([1, 2, 3, 3, 11, 12, 14, 20, 21, 22, 25, 29, 29, 33], 2),
-            ([0, 3, 4, 6, 7, 8, 11, 11, 11, 13, 13, 15, 24, 24], 1),
-            ([2, 2, 4, 4, 12, 13, 14, 18, 19, 20, 21, 21, 22, 26], 1),
-            ([1, 2, 5, 5, 7, 7, 10, 11, 12, 14, 14, 16, 28, 28], 2),
-            ([4, 10, 11, 13, 14, 17, 17, 19, 20, 21, 23, 24, 24, 25], 1),
-            ([2, 3, 4, 5, 6, 6, 7, 7, 8, 15, 17, 18, 19, 19], 0),
-            ([1, 2, 3, 4, 5, 6, 6, 10, 11, 15, 16, 17, 19, 20], 1),
-            ([3, 6, 8, 9, 9, 10, 13, 18, 19, 20, 21, 21, 22, 33], 3),
-            ([8, 8, 9, 9, 10, 12, 17, 18, 18, 18, 25, 26, 29, 30], 2),
-            ([0, 0, 2, 4, 5, 9, 11, 15, 24, 25, 26, 32, 33, 33], 2),
-            ([7, 10, 10, 13, 13, 14, 16, 16, 16, 21, 22, 29, 29, 32], 2),
-            ([2, 2, 3, 5, 5, 6, 11, 11, 14, 16, 19, 21, 24, 25], 3),
-            ([0, 1, 2, 3, 3, 6, 7, 7, 7, 8, 13, 22, 27, 31], 2),
-            ([0, 0, 3, 4, 11, 11, 18, 19, 20, 20, 21, 23, 32, 32], 2),
-            ([2, 3, 5, 6, 7, 13, 14, 15, 16, 16, 18, 18, 25, 27], 1),
-            ([1, 1, 1, 2, 2, 3, 4, 4, 5, 7, 10, 11, 22, 32], 2),
-            ([0, 1, 4, 5, 6, 8, 12, 13, 22, 23, 24, 26, 26, 27], 1),
-            ([1, 2, 5, 6, 7, 10, 12, 15, 19, 20, 20, 20, 24, 24], 1),
-            ([0, 0, 0, 3, 4, 13, 15, 17, 17, 19, 23, 25, 26, 31], 2),
-            ([1, 12, 13, 17, 18, 18, 19, 20, 21, 25, 26, 31, 31, 32], 2),
-            ([1, 2, 3, 4, 4, 4, 9, 10, 10, 17, 17, 17, 30, 30], 0),
-            ([3, 5, 6, 10, 10, 12, 15, 16, 19, 19, 20, 22, 23, 29], 3),
-            ([3, 4, 6, 6, 11, 13, 14, 15, 16, 18, 20, 24, 26, 33], 2),
-            ([0, 1, 1, 4, 5, 7, 13, 14, 17, 17, 19, 20, 22, 31], 3),
-            ([1, 4, 5, 6, 11, 12, 23, 24, 28, 29, 29, 31, 33, 33], 2),
-            ([1, 2, 2, 3, 3, 4, 6, 7, 24, 25, 26, 30, 33, 33], 0),
-            ([0, 2, 10, 10, 12, 12, 13, 14, 14, 16, 16, 22, 23, 26], 2),
-            ([8, 8, 10, 13, 14, 20, 22, 23, 24, 24, 25, 25, 28, 28], 2),
-            ([2, 4, 5, 7, 11, 12, 16, 16, 20, 22, 25, 25, 28, 28], 3),
-            ([1, 1, 3, 4, 4, 6, 7, 11, 11, 13, 14, 15, 18, 19], 2),
-            ([2, 2, 2, 5, 11, 11, 12, 13, 14, 14, 18, 23, 23, 23], 1),
-            ([5, 6, 10, 12, 14, 15, 15, 23, 23, 23, 24, 25, 26, 30], 1),
-            ([2, 3, 4, 10, 11, 13, 14, 19, 20, 23, 23, 25, 27, 27], 2),
-            ([3, 4, 5, 8, 12, 13, 14, 19, 19, 20, 22, 24, 24, 30], 1),
-            ([4, 5, 15, 16, 17, 19, 19, 22, 27, 29, 29, 29, 30, 32], 2),
-            ([2, 11, 13, 13, 14, 14, 17, 17, 18, 18, 21, 23, 25, 27], 3),
-            ([3, 12, 13, 14, 14, 15, 16, 16, 18, 18, 18, 22, 23, 32], 1),
-            ([1, 1, 6, 7, 7, 15, 15, 17, 22, 23, 24, 26, 28, 32], 3),
-            ([0, 1, 2, 6, 6, 12, 16, 20, 20, 22, 23, 24, 27, 27], 1),
-            ([2, 7, 8, 10, 11, 12, 13, 14, 16, 16, 17, 21, 22, 31], 2),
-            ([0, 1, 2, 4, 7, 9, 11, 14, 14, 15, 18, 19, 31, 32], 3),
-            ([3, 5, 6, 6, 7, 13, 14, 17, 17, 19, 20, 21, 29, 31], 2),
-            ([1, 2, 2, 5, 6, 7, 8, 11, 12, 13, 21, 23, 30, 30], 1),
-            ([6, 6, 9, 10, 13, 13, 15, 15, 19, 21, 21, 27, 27, 32], 3),
-            ([1, 1, 5, 6, 6, 8, 10, 13, 14, 14, 18, 21, 32, 33], 4),
-            ([3, 8, 9, 13, 15, 15, 19, 20, 21, 23, 25, 26, 28, 29], 4),
-            ([1, 2, 3, 4, 4, 4, 10, 10, 17, 17, 17, 28, 30, 30], 0),
-            ([2, 3, 3, 6, 7, 8, 8, 16, 20, 23, 25, 28, 29, 30], 4),
-            ([1, 5, 7, 9, 11, 15, 19, 19, 22, 23, 23, 24, 31, 31], 2),
-            ([1, 3, 4, 4, 5, 8, 11, 14, 14, 17, 22, 23, 24, 25], 3),
-            ([6, 10, 15, 18, 20, 21, 21, 22, 23, 24, 25, 26, 26, 28], 3),
-            ([3, 10, 10, 10, 11, 13, 14, 17, 20, 21, 22, 22, 23, 23], 2),
-            ([1, 2, 3, 4, 5, 12, 12, 15, 17, 20, 23, 24, 33, 33], 2),
-            ([2, 3, 4, 5, 6, 7, 8, 10, 11, 16, 16, 22, 24, 24], 1),
-            ([1, 2, 3, 4, 5, 6, 12, 13, 14, 15, 16, 17, 18, 18], -1),
-            ([6, 7, 8, 9, 11, 18, 19, 20, 23, 24, 24, 24, 25, 33], 0),
-            ([1, 3, 3, 6, 13, 14, 14, 17, 23, 25, 25, 26, 31, 32], 4),
-            ([1, 2, 3, 3, 4, 5, 13, 14, 18, 18, 18, 19, 19, 27], 0),
-            ([0, 1, 6, 9, 10, 11, 15, 16, 17, 22, 23, 24, 27, 27], 0),
-            ([0, 1, 1, 2, 2, 2, 3, 4, 8, 8, 17, 21, 22, 23], 0),
-            ([0, 1, 2, 7, 10, 13, 15, 16, 17, 21, 23, 28, 33, 33], 2),
-            ([1, 2, 3, 4, 5, 12, 13, 16, 19, 21, 27, 27, 30, 31], 2),
-            ([3, 4, 13, 14, 17, 20, 20, 21, 25, 29, 29, 31, 32, 32], 3),
-            ([1, 1, 1, 2, 3, 6, 6, 6, 7, 14, 15, 20, 21, 22], 0),
-            ([10, 12, 15, 16, 17, 18, 19, 20, 21, 23, 24, 27, 27, 27], 1),
-            ([13, 14, 15, 17, 17, 19, 20, 21, 23, 23, 24, 24, 25, 26], 0),
-            ([0, 1, 5, 13, 15, 19, 19, 20, 22, 22, 23, 24, 24, 33], 2),
-            ([3, 6, 10, 11, 12, 15, 17, 18, 20, 30, 31, 31, 32, 32], 2),
-            ([7, 7, 8, 8, 14, 14, 16, 19, 20, 22, 22, 24, 25, 31], 3),
-            ([4, 9, 10, 12, 14, 16, 17, 19, 21, 23, 23, 24, 33, 33], 3),
-            ([3, 3, 5, 5, 5, 6, 12, 13, 14, 14, 18, 18, 24, 25], 1),
-            ([0, 3, 4, 6, 7, 7, 10, 12, 13, 16, 17, 21, 28, 30], 4),
-            ([1, 6, 7, 8, 8, 13, 20, 23, 24, 24, 26, 31, 32, 32], 3),
-            ([4, 9, 9, 10, 11, 12, 14, 15, 21, 21, 21, 22, 23, 25], 1),
-            ([4, 4, 6, 13, 14, 14, 15, 15, 18, 18, 21, 21, 21, 29], 1),
-            ([2, 5, 13, 16, 16, 19, 19, 23, 24, 27, 27, 28, 31, 33], 4),
-            ([2, 2, 3, 5, 5, 6, 10, 12, 14, 15, 16, 23, 24, 25], 1),
-            ([5, 6, 7, 7, 7, 8, 8, 11, 12, 13, 21, 21, 22, 23], 0),
-            ([3, 5, 11, 11, 11, 12, 12, 14, 15, 15, 15, 15, 16, 23], 0),
-            ([0, 0, 4, 5, 5, 6, 14, 15, 16, 17, 17, 20, 25, 31], 2),
-            ([0, 3, 4, 4, 4, 5, 5, 6, 11, 14, 15, 18, 20, 22], 2),
-            ([3, 4, 6, 12, 12, 14, 15, 16, 17, 17, 17, 22, 23, 24], 0),
-            ([7, 10, 15, 18, 21, 21, 24, 25, 25, 26, 26, 26, 32, 33], 4),
-            ([3, 10, 10, 11, 13, 14, 14, 15, 16, 19, 22, 24, 27, 31], 3),
-            ([2, 3, 6, 8, 9, 11, 12, 12, 13, 13, 15, 16, 17, 21], 2),
-            ([0, 1, 6, 6, 7, 10, 13, 13, 14, 17, 17, 21, 23, 28], 3),
-            ([18, 18, 18, 18, 20, 21, 22, 24, 24, 25, 26, 33, 33, 33], 0),
-            ([0, 1, 2, 4, 9, 11, 13, 14, 15, 17, 17, 19, 19, 21], 1),
-            ([1, 3, 6, 11, 11, 12, 12, 18, 18, 19, 20, 21, 24, 33], 2),
-            ([2, 3, 3, 9, 12, 14, 16, 18, 21, 24, 24, 27, 28, 29], 5),
-            ([3, 4, 4, 8, 13, 14, 14, 15, 15, 19, 30, 31, 33, 33], 3),
-            ([0, 0, 1, 3, 5, 7, 7, 8, 16, 17, 20, 21, 29, 29], 3),
-            ([3, 3, 4, 4, 6, 8, 19, 20, 27, 28, 30, 31, 32, 33], 4),
-            ([1, 4, 5, 13, 15, 16, 17, 18, 19, 20, 23, 24, 27, 31], 2),
-            ([1, 2, 2, 3, 3, 4, 11, 11, 19, 20, 23, 23, 23, 25], 0),
-            ([2, 4, 5, 10, 16, 18, 19, 22, 23, 28, 29, 30, 31, 32], 5),
-            ([5, 6, 16, 17, 18, 18, 19, 21, 21, 23, 23, 29, 31, 31], 3),
-            ([1, 2, 3, 5, 5, 6, 10, 14, 15, 20, 23, 23, 23, 29], 2),
-            ([3, 4, 4, 5, 13, 14, 15, 15, 18, 22, 23, 23, 24, 29], 2),
-            ([11, 11, 11, 11, 13, 14, 21, 22, 23, 23, 25, 25, 30, 30], 1),
-            ([1, 2, 3, 3, 4, 11, 14, 15, 18, 23, 23, 24, 25, 26], 1),
-            ([0, 1, 2, 2, 5, 8, 14, 19, 20, 25, 30, 30, 31, 33], 4),
-            ([0, 1, 2, 3, 6, 7, 8, 21, 21, 22, 22, 23, 23, 25], 0),
-            ([0, 0, 2, 3, 4, 7, 8, 10, 12, 13, 13, 14, 14, 15], 0),
-            ([1, 3, 5, 13, 14, 14, 16, 18, 19, 20, 23, 27, 29, 29], 2),
-            ([1, 5, 5, 9, 11, 15, 15, 16, 17, 17, 21, 22, 22, 23], 1),
-            ([18, 19, 20, 21, 22, 23, 25, 25, 27, 27, 27, 29, 29, 31], 0),
-            ([2, 3, 3, 7, 9, 12, 17, 19, 20, 23, 24, 26, 29, 30], 5),
-            ([1, 2, 2, 3, 3, 5, 7, 11, 11, 12, 15, 19, 21, 21], 2),
-            ([0, 11, 12, 13, 14, 15, 15, 17, 17, 20, 21, 21, 23, 24], 2),
-            ([0, 3, 13, 14, 14, 16, 21, 22, 25, 26, 26, 27, 29, 29], 3),
-            ([4, 4, 4, 7, 14, 14, 14, 23, 23, 24, 25, 26, 31, 31], 0),
-            ([2, 2, 3, 6, 7, 8, 11, 12, 12, 19, 19, 21, 22, 23], 1),
-            ([5, 14, 15, 18, 18, 20, 21, 22, 23, 24, 25, 28, 29, 29], 1),
-            ([0, 2, 4, 10, 11, 13, 13, 13, 15, 19, 22, 25, 25, 25], 2),
-            ([4, 6, 9, 9, 11, 11, 12, 18, 22, 24, 24, 32, 33, 33], 3),
-            ([2, 5, 11, 12, 12, 13, 13, 14, 15, 16, 20, 21, 22, 22], 1),
-            ([12, 14, 15, 15, 18, 19, 21, 21, 22, 22, 24, 25, 26, 32], 2),
-            ([1, 2, 2, 2, 12, 15, 15, 17, 17, 23, 25, 26, 26, 31], 2),
-            ([2, 3, 4, 5, 5, 5, 16, 16, 21, 22, 23, 24, 25, 25], 0),
-            ([2, 3, 3, 4, 6, 9, 9, 9, 10, 18, 22, 22, 23, 25], 2),
-            ([1, 1, 1, 6, 7, 8, 13, 13, 15, 16, 17, 24, 25, 26], -1),
-            ([2, 3, 3, 4, 6, 11, 12, 13, 13, 14, 15, 22, 23, 24], 0),
-            ([0, 2, 9, 10, 12, 12, 13, 13, 20, 20, 22, 29, 30, 30], 3),
-            ([4, 6, 6, 6, 13, 16, 16, 20, 23, 24, 24, 26, 27, 28], 3),
-            ([1, 1, 2, 3, 6, 6, 10, 12, 13, 14, 19, 23, 29, 29], 2),
-            ([0, 3, 4, 7, 11, 11, 14, 14, 16, 16, 24, 25, 25, 26], 2),
-            ([3, 4, 4, 4, 5, 8, 11, 19, 25, 28, 30, 31, 32, 33], 5),
-            ([6, 7, 7, 9, 9, 16, 16, 17, 20, 20, 22, 23, 23, 24], 2),
-            ([2, 3, 3, 12, 13, 15, 15, 17, 21, 21, 21, 23, 23, 24], 2),
-            ([0, 1, 2, 3, 4, 13, 13, 14, 15, 16, 22, 23, 24, 27], 0),
-            ([0, 1, 4, 8, 12, 14, 17, 19, 19, 22, 24, 27, 31, 33], 4),
-            ([2, 5, 10, 12, 13, 14, 15, 15, 24, 25, 30, 31, 33, 33], 3),
-            ([1, 3, 4, 5, 11, 11, 12, 13, 21, 22, 22, 23, 25, 25], 1),
-            ([2, 2, 3, 6, 6, 16, 16, 20, 20, 20, 22, 23, 24, 33], 1),
-            ([0, 1, 2, 5, 9, 10, 11, 18, 19, 23, 24, 26, 26, 26], 1),
-            ([2, 2, 3, 6, 11, 12, 13, 14, 18, 23, 24, 28, 32, 33], 4),
-            ([2, 4, 12, 12, 13, 15, 17, 18, 23, 23, 25, 32, 32, 33], 3),
-            ([2, 3, 5, 9, 10, 16, 21, 21, 21, 22, 23, 25, 26, 26], 2),
-            ([1, 3, 10, 11, 12, 14, 15, 16, 19, 21, 26, 26, 26, 30], 1),
-            ([3, 9, 12, 14, 15, 17, 18, 22, 24, 28, 31, 32, 33, 33], 4),
-            ([4, 9, 16, 18, 18, 19, 19, 20, 20, 21, 23, 27, 28, 32], 3),
-            ([4, 10, 11, 11, 12, 19, 21, 22, 22, 25, 26, 27, 30, 32], 3),
-            ([4, 5, 15, 16, 17, 19, 19, 20, 22, 23, 29, 29, 29, 30], 1),
-            ([1, 1, 2, 3, 3, 5, 7, 12, 12, 13, 21, 21, 25, 26], 2),
-            ([0, 1, 1, 1, 5, 6, 8, 10, 13, 13, 21, 22, 24, 24], 2),
-            ([1, 3, 13, 14, 15, 15, 15, 17, 19, 20, 22, 27, 31, 33], 3),
-            ([1, 4, 5, 8, 12, 13, 19, 20, 20, 21, 21, 30, 31, 33], 3),
-            ([1, 1, 1, 8, 16, 16, 17, 17, 18, 24, 24, 30, 31, 31], 2),
-            ([1, 2, 2, 3, 15, 18, 18, 21, 21, 27, 28, 30, 32, 33], 4),
-            ([1, 6, 8, 9, 12, 14, 14, 15, 16, 19, 20, 23, 30, 32], 3),
-            ([2, 3, 4, 5, 6, 6, 11, 11, 15, 16, 16, 17, 17, 25], 1),
-            ([1, 7, 8, 9, 10, 11, 11, 12, 15, 17, 22, 24, 26, 32], 3),
-            ([0, 2, 9, 10, 10, 12, 18, 21, 22, 22, 24, 25, 32, 33], 3),
-            ([3, 4, 5, 5, 11, 11, 12, 15, 21, 21, 22, 25, 30, 32], 4),
-            ([3, 4, 4, 6, 6, 13, 16, 17, 19, 20, 20, 22, 22, 31], 3),
-            ([0, 2, 4, 5, 5, 8, 8, 10, 16, 21, 22, 27, 28, 29], 4),
-            ([4, 5, 5, 11, 11, 11, 21, 23, 23, 23, 25, 25, 33, 33], 1),
-            ([2, 2, 2, 4, 5, 10, 11, 15, 16, 17, 21, 22, 23, 31], 1),
-            ([2, 5, 12, 18, 19, 21, 22, 22, 26, 30, 30, 31, 31, 31], 3),
-            ([0, 2, 2, 6, 11, 14, 16, 17, 18, 18, 18, 22, 24, 25], 3),
-            ([1, 2, 3, 6, 7, 10, 10, 13, 21, 21, 23, 23, 23, 24], 1),
-            ([0, 1, 2, 14, 15, 15, 18, 19, 19, 20, 21, 24, 25, 30], 1),
-            ([5, 5, 10, 12, 16, 16, 19, 19, 21, 21, 22, 22, 23, 23], 1),
-            ([4, 4, 5, 6, 6, 7, 7, 8, 20, 21, 22, 23, 24, 25], -1),
-            ([0, 1, 5, 10, 11, 11, 13, 14, 15, 18, 21, 22, 32, 32], 2),
-            ([2, 3, 4, 5, 13, 14, 15, 15, 16, 22, 28, 28, 28, 29], 1),
-            ([0, 2, 2, 3, 15, 22, 23, 25, 28, 29, 29, 30, 32, 33], 4),
-            ([1, 2, 10, 12, 12, 13, 14, 20, 21, 23, 23, 24, 33, 33], 2),
-            ([0, 1, 2, 9, 10, 11, 18, 19, 21, 23, 24, 26, 26, 26], 1),
-            ([3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 19, 19, 24, 25], 0),
-            ([6, 9, 10, 11, 12, 13, 16, 21, 23, 23, 29, 29, 32, 33], 3),
-            ([2, 3, 4, 12, 12, 14, 15, 15, 16, 18, 20, 21, 23, 33], 1),
-            ([3, 4, 4, 6, 7, 12, 13, 13, 14, 14, 17, 21, 22, 23], 1),
-            ([0, 1, 6, 7, 7, 8, 13, 15, 18, 19, 21, 22, 23, 33], 2),
-            ([3, 5, 6, 9, 10, 12, 20, 22, 24, 30, 30, 31, 32, 33], 4),
-            ([3, 3, 4, 5, 6, 7, 8, 11, 12, 14, 14, 16, 21, 22], 1),
-            ([11, 18, 18, 20, 21, 21, 21, 22, 23, 24, 25, 26, 29, 29], 1),
-            ([2, 3, 6, 6, 8, 10, 15, 15, 19, 20, 21, 24, 24, 24], 1),
-            ([2, 2, 5, 10, 10, 16, 19, 20, 20, 21, 21, 21, 25, 25], 2),
-            ([2, 3, 5, 8, 8, 11, 19, 19, 21, 22, 23, 23, 30, 32], 3),
-            ([1, 1, 4, 5, 8, 13, 15, 16, 17, 20, 20, 22, 22, 23], 2),
-            ([1, 2, 3, 7, 11, 12, 13, 15, 21, 24, 24, 26, 26, 27], 2),
-            ([0, 1, 2, 4, 4, 5, 12, 15, 19, 20, 21, 22, 26, 27], 3),
-            ([1, 3, 4, 4, 6, 14, 20, 21, 23, 23, 24, 31, 31, 32], 3),
-            ([2, 3, 4, 5, 6, 8, 8, 13, 13, 14, 19, 19, 19, 30], 1),
-            ([0, 1, 2, 9, 10, 11, 13, 14, 14, 16, 17, 18, 24, 25], 1),
-            ([0, 1, 2, 2, 4, 7, 7, 7, 11, 11, 12, 21, 21, 32], 1),
-            ([0, 0, 2, 3, 5, 6, 6, 7, 10, 11, 28, 28, 28, 32], 1),
-            ([1, 4, 5, 6, 7, 8, 9, 10, 13, 14, 21, 24, 26, 26], 2),
-            ([5, 5, 6, 7, 8, 9, 10, 13, 14, 17, 19, 20, 22, 28], 2),
-            ([3, 3, 4, 5, 5, 7, 14, 18, 18, 19, 26, 27, 31, 32], 4),
-            ([1, 3, 6, 7, 8, 9, 12, 14, 20, 24, 24, 31, 32, 33], 3),
-            ([1, 6, 6, 7, 7, 8, 8, 9, 10, 11, 23, 23, 24, 26], 0),
-            ([3, 4, 5, 7, 10, 11, 14, 18, 20, 21, 22, 24, 25, 26], 1),
-            ([1, 2, 3, 3, 4, 6, 6, 7, 7, 10, 14, 14, 23, 25], 2),
-            ([1, 2, 9, 9, 10, 18, 19, 20, 22, 23, 27, 28, 28, 32], 2),
-            ([2, 4, 6, 11, 11, 15, 16, 18, 19, 20, 21, 21, 22, 23], 1),
-            ([5, 7, 9, 9, 13, 13, 15, 17, 21, 22, 25, 29, 31, 32], 3),
-            ([2, 2, 3, 6, 7, 10, 13, 16, 16, 20, 23, 23, 25, 31], 4),
-            ([0, 1, 5, 6, 7, 11, 12, 12, 13, 13, 14, 15, 16, 17], 0),
-            ([0, 1, 2, 4, 5, 12, 18, 18, 22, 23, 23, 27, 28, 32], 3),
-            ([1, 5, 5, 8, 8, 11, 17, 17, 19, 19, 22, 24, 24, 29], 3),
-            ([2, 3, 5, 5, 10, 12, 13, 14, 15, 16, 22, 23, 24, 33], 1),
-            ([2, 3, 3, 4, 6, 11, 14, 18, 23, 25, 26, 29, 29, 33], 4),
-            ([0, 2, 4, 5, 7, 7, 10, 19, 21, 21, 24, 25, 30, 33], 3),
-            ([10, 11, 12, 14, 15, 15, 17, 18, 19, 22, 23, 24, 25, 26], 1),
-            ([0, 2, 3, 5, 7, 11, 15, 16, 17, 19, 25, 27, 27, 28], 3),
-            ([2, 6, 10, 11, 13, 15, 16, 18, 19, 20, 20, 28, 31, 31], 3),
-            ([5, 5, 10, 11, 12, 15, 16, 18, 19, 20, 24, 24, 24, 33], 0),
-            ([1, 4, 7, 10, 11, 16, 17, 20, 20, 20, 22, 22, 25, 31], 3),
-            ([2, 3, 3, 4, 6, 7, 8, 11, 13, 15, 24, 24, 27, 29], 2),
-            ([2, 3, 5, 8, 8, 10, 10, 12, 12, 13, 14, 16, 26, 33], 3),
-            ([2, 2, 4, 5, 5, 5, 6, 7, 8, 8, 14, 22, 23, 24], 1),
-            ([2, 3, 4, 6, 7, 10, 11, 14, 15, 18, 27, 27, 30, 33], 2),
-            ([7, 7, 7, 8, 12, 12, 13, 13, 14, 15, 16, 22, 23, 24], 0),
-            ([2, 3, 6, 7, 10, 14, 16, 19, 26, 28, 28, 29, 30, 33], 4),
-            ([4, 4, 10, 12, 15, 18, 19, 25, 25, 31, 31, 32, 32, 33], 3),
-            ([1, 2, 9, 10, 12, 13, 16, 17, 23, 24, 24, 26, 28, 29], 3),
-            ([1, 3, 5, 9, 9, 10, 10, 13, 14, 15, 15, 23, 31, 32], 3),
-            ([5, 5, 10, 11, 12, 13, 15, 19, 19, 20, 24, 24, 25, 28], 2),
-            ([0, 2, 2, 6, 7, 13, 14, 18, 20, 20, 22, 22, 23, 28], 3),
-            ([8, 8, 11, 11, 15, 16, 17, 21, 28, 29, 31, 32, 32, 33], 3),
-            ([0, 5, 6, 13, 14, 15, 18, 19, 20, 22, 24, 24, 29, 29], 1),
-            ([4, 5, 5, 9, 10, 10, 12, 14, 18, 19, 19, 19, 23, 33], 3),
-            ([7, 7, 9, 11, 12, 16, 16, 20, 20, 23, 24, 32, 33, 33], 3),
-            ([1, 1, 4, 4, 5, 11, 11, 11, 14, 19, 21, 23, 25, 32], 2),
-            ([1, 2, 4, 4, 5, 10, 12, 14, 15, 18, 21, 23, 27, 28], 3),
-            ([1, 2, 3, 6, 10, 17, 18, 22, 24, 25, 26, 29, 30, 33], 4),
-            ([0, 20, 21, 21, 21, 23, 23, 24, 27, 29, 30, 31, 32, 33], 5),
-            ([1, 5, 7, 8, 11, 20, 21, 21, 22, 23, 24, 25, 26, 28], 2),
-            ([1, 2, 2, 6, 16, 22, 23, 24, 25, 27, 30, 31, 32, 33], 5),
-            ([0, 6, 6, 7, 11, 12, 14, 20, 22, 22, 23, 24, 29, 29], 2),
-            ([7, 8, 13, 13, 15, 15, 15, 21, 22, 22, 23, 23, 24, 33], 0),
-            ([5, 6, 6, 8, 10, 12, 18, 18, 19, 22, 24, 26, 30, 30], 3),
-            ([2, 3, 14, 14, 15, 16, 16, 16, 23, 24, 24, 27, 27, 32], 2),
-            ([1, 3, 4, 5, 7, 9, 10, 12, 14, 15, 22, 22, 25, 32], 3),
-            ([1, 3, 4, 6, 12, 14, 15, 16, 17, 17, 17, 22, 23, 27], 2),
-            ([1, 2, 3, 4, 5, 7, 14, 19, 19, 21, 23, 29, 30, 32], 3),
-            ([0, 7, 11, 16, 17, 18, 19, 20, 24, 26, 28, 31, 31, 32], 3),
-            ([1, 2, 2, 2, 6, 7, 11, 12, 15, 17, 21, 22, 24, 26], 3),
-            ([4, 6, 7, 8, 14, 16, 16, 21, 22, 23, 27, 28, 31, 32], 3),
-            ([3, 5, 10, 11, 12, 13, 14, 14, 15, 16, 21, 23, 30, 30], 1),
-            ([4, 6, 7, 8, 16, 16, 21, 22, 23, 26, 27, 28, 31, 32], 3),
-            ([0, 0, 3, 8, 9, 11, 13, 14, 21, 22, 24, 27, 30, 32], 4),
-            ([1, 2, 7, 7, 8, 9, 9, 11, 11, 12, 15, 24, 32, 32], 3),
-            ([3, 4, 4, 5, 5, 7, 11, 16, 18, 22, 24, 25, 27, 28], 4),
-            ([3, 3, 7, 14, 16, 16, 17, 17, 18, 18, 19, 20, 21, 27], 2),
-            ([6, 7, 11, 12, 13, 13, 14, 15, 20, 23, 25, 25, 25, 33], 1),
-            ([3, 6, 10, 12, 13, 14, 15, 17, 17, 20, 21, 23, 23, 33], 2),
-            ([0, 1, 1, 4, 8, 15, 15, 16, 17, 19, 20, 23, 27, 31], 4),
-            ([3, 3, 5, 5, 5, 12, 13, 14, 17, 18, 18, 24, 25, 27], 1),
-            ([2, 5, 12, 15, 15, 16, 17, 20, 23, 25, 25, 26, 26, 26], 3),
-            ([0, 0, 1, 2, 3, 4, 7, 8, 12, 13, 13, 14, 14, 15], 0),
-            ([2, 7, 9, 10, 13, 13, 21, 21, 22, 23, 24, 28, 29, 33], 3),
-            ([0, 0, 1, 2, 5, 14, 17, 18, 20, 20, 23, 23, 26, 26], 3),
-            ([2, 7, 11, 13, 14, 16, 17, 18, 18, 18, 20, 23, 30, 30], 3),
-            ([4, 5, 11, 13, 15, 15, 16, 19, 20, 21, 22, 23, 31, 31], 2),
-            ([1, 2, 5, 13, 14, 17, 19, 27, 27, 28, 29, 30, 32, 32], 4),
-            ([13, 14, 15, 16, 17, 19, 20, 20, 21, 22, 23, 24, 25, 26], 0),
-            ([1, 2, 2, 10, 12, 13, 13, 15, 15, 18, 22, 24, 26, 26], 3),
-            ([3, 3, 3, 5, 5, 5, 10, 12, 21, 22, 24, 25, 25, 26], 1),
-            ([1, 2, 4, 5, 5, 7, 7, 12, 14, 15, 15, 16, 22, 22], 2),
-            ([2, 3, 4, 5, 5, 6, 10, 11, 18, 19, 20, 26, 26, 27], 1),
-            ([0, 1, 4, 4, 5, 10, 11, 11, 12, 20, 21, 21, 23, 25], 2),
-            ([4, 5, 8, 9, 10, 12, 13, 14, 20, 21, 21, 28, 28, 28], 1),
-            ([1, 2, 5, 9, 10, 10, 13, 13, 17, 23, 25, 26, 29, 31], 4),
-            ([0, 1, 1, 2, 2, 3, 4, 5, 27, 31, 31, 32, 33, 33], 1),
-            ([2, 3, 6, 9, 11, 11, 14, 15, 16, 16, 22, 23, 32, 32], 2),
-            ([0, 4, 5, 5, 7, 7, 11, 17, 20, 20, 24, 30, 33, 33], 4),
-            ([0, 1, 2, 4, 9, 10, 14, 16, 20, 20, 23, 24, 27, 31], 2),
-            ([1, 3, 3, 3, 8, 8, 10, 11, 17, 18, 19, 20, 30, 32], 2),
-            ([1, 4, 6, 10, 10, 11, 24, 26, 27, 27, 31, 32, 33, 33], 3),
-            ([5, 6, 6, 6, 7, 7, 7, 10, 11, 14, 15, 27, 27, 28], 1),
+            ([M4, M5, P1, P2, P7, P7, P8, S3, S7, E, S, W, WD, RD], 5),
+            ([M2, M5, P2, S1, S1, S4, S5, S8, S9, S9, S, W, WD, GD], 4),
+            ([M2, M3, M3, M4, M5, M6, M7, P3, P6, P6, S4, S7, S8, GD], 2),
+            ([M6, M7, M8, P2, P4, P5, P6, P6, S3, S4, S5, S7, S8, RD], 1),
+            ([M2, M3, M6, M6, M7, M8, M9, P2, P5, P6, S4, S8, W, W], 2),
+            ([M8, M9, P3, P3, P4, P6, P7, S2, S6, S7, S8, S9, S, GD], 3),
+            ([M2, M3, P4, P5, P5, P9, S3, S4, S7, S8, S8, S8, N, RD], 3),
+            ([M1, M1, M2, M4, M6, M6, P6, P7, S4, S5, S7, S8, S8, GD], 3),
+            ([M3, M5, M5, M6, M7, M8, P6, P6, P7, S2, S3, S7, S8, S9], 1),
+            ([M2, M3, M6, M7, P3, P4, P5, P8, P8, P9, S9, E, WD, RD], 3),
+            ([M3, M3, M4, M7, M7, P1, P3, P4, P8, S3, S4, S6, S7, S8], 2),
+            ([M2, M4, M6, M6, P1, P2, P5, P6, P7, S1, S2, S4, S6, S8], 2),
+            ([M2, M2, M5, M8, P2, P3, P8, P9, S3, S3, S3, S5, S5, S5], 1),
+            ([M4, M4, M5, M6, M7, M8, P4, P5, S1, S1, S2, S2, S3, S3], 0),
+            ([M1, M3, M4, M4, P3, P5, P7, S3, S3, S5, W, W, WD, WD], 2),
+            ([M1, M3, M5, M7, M7, P2, P3, S4, S4, S5, S5, S7, E, E], 2),
+            ([M3, M3, M5, M9, M9, M9, P6, S4, S5, S5, S7, S8, S8, S9], 2),
+            ([M1, M2, M3, M7, M9, P1, P2, P6, S1, S3, S3, S4, S7, S8], 2),
+            ([M1, M4, M6, M7, P2, P2, S2, S4, S6, S6, S, N, N, GD], 3),
+            ([M1, M4, M6, M8, M9, M9, P8, P9, S5, S5, E, N, GD, RD], 4),
+            ([M1, M2, M4, M4, M8, P3, P4, S5, S6, S6, S7, E, E, WD], 2),
+            ([M2, M6, M6, M7, M7, P1, P5, P7, P9, S6, E, WD, WD, RD], 3),
+            ([M3, M4, P1, P2, P3, P4, P7, P9, S5, S6, S7, WD, GD, RD], 2),
+            ([M5, M7, M8, P3, P3, S2, S3, S4, S7, S8, S8, E, S, W], 3),
+            ([M7, M9, P1, P1, P2, P3, P3, P5, P8, S2, S4, S7, S8, S8], 2),
+            ([M6, M6, P2, P3, P4, P8, P9, S1, S3, S4, S5, S6, S6, S6], 0),
+            ([M3, M4, M7, M7, P1, P1, P2, P3, P4, S4, S6, S6, S7, S], 2),
+            ([M1, M2, M3, M5, M8, M9, P2, P4, S4, S6, S9, W, GD, RD], 3),
+            ([M1, M1, M7, P3, P4, P6, P7, P8, S3, S4, E, E, E, W], 1),
+            ([M6, M7, M8, P1, P2, P3, P6, P7, P8, P9, P9, S5, S6, N], 0),
+            ([M3, M5, P3, P4, P5, P6, P7, P8, P8, S1, S2, S3, E, E], 0),
+            ([M6, M8, P1, P2, P2, P4, P4, P5, P5, S3, S5, S8, S8, W], 2),
+            ([M2, M3, M4, M6, P4, P5, P6, P7, S1, S2, S3, S3, S4, S5], 0),
+            ([M2, M2, M4, M7, M8, M9, P6, S1, S2, S3, S3, S5, RD, RD], 1),
+            ([M4, M4, M6, M9, M9, P2, P5, P7, P9, S1, S6, S8, E, RD], 4),
+            ([M4, M5, M5, M7, M7, P2, P5, P8, P9, S2, S3, S5, S5, WD], 3),
+            ([M4, M7, M9, P4, P7, P7, P8, S1, S2, S3, S5, S9, W, W], 3),
+            ([M2, M3, M4, P4, P4, P6, P8, S2, S2, S3, S4, S4, S6, W], 1),
+            ([M3, M5, M5, M6, M7, P2, P3, P7, S5, S5, S6, S7, S7, S7], 1),
+            ([P3, P5, P6, P7, P7, P8, P8, P9, S6, S6, S6, S7, S8, S9], 0),
+            ([M1, M2, M7, M9, M9, P1, P3, P9, P9, S1, S3, S3, S4, S6], 3),
+            ([M3, M4, M4, M4, M5, M6, M7, P5, P6, P7, P8, S6, S7, S8], 0),
+            ([M6, M6, M8, P2, P3, P3, P4, P7, S6, S6, S7, S8, RD, RD], 2),
+            ([M3, M4, M6, P4, P5, P6, P8, P9, P9, S4, S5, S6, E, RD], 2),
+            ([M7, M8, P1, P2, P3, P7, S4, S5, S6, E, E, W, W, RD], 1),
+            ([M2, M3, M5, M6, M6, M7, P3, P5, S2, S3, S4, S7, S8, N], 2),
+            ([M1, M5, M6, M9, P2, P2, P3, P6, P6, S3, S3, S3, RD, RD], 2),
+            ([M1, M2, M6, M6, P1, P3, P6, P6, P7, P8, P8, S3, S4, S5], 1),
+            ([M3, M5, M9, P2, P3, P5, P7, S2, S4, S5, S7, S9, N, GD], 4),
+            ([M1, M6, M8, P2, P3, P4, P6, P8, P9, S2, S5, S7, E, RD], 3),
+            ([M3, M4, M8, M9, P4, P7, P8, P9, S7, E, S, W, W, N], 3),
+            ([M1, M1, M9, M9, P4, P4, P5, P5, P9, P9, S5, S5, E, GD], 0),
+            ([M2, M4, P2, P2, P3, P4, P4, P5, P5, P6, P8, P8, S7, N], 1),
+            ([M2, M3, M6, M7, M8, P1, P2, P4, P4, P6, P7, P8, E, W], 1),
+            ([M1, M5, M6, M7, M7, P2, P4, P4, P5, P6, S2, S4, S6, S6], 1),
+            ([M3, M4, M6, M8, P1, P2, P5, P8, S2, S5, S7, S7, S7, S8], 3),
+            ([M2, M3, M3, M5, M6, M6, M8, P4, P5, P6, S2, S4, S7, WD], 2),
+            ([M1, M3, M4, M6, M7, M8, P2, P2, P5, P5, P6, P7, S2, S8], 2),
+            ([M4, M4, M7, M7, M9, M9, P3, P3, P9, P9, S1, S6, S6, RD], 0),
+            ([M3, M4, M5, M8, M9, M9, P2, P5, P6, P6, S1, S1, S5, S6], 2),
+            ([M3, M5, M7, M8, P3, P3, P3, P6, S1, S1, S3, S7, S8, S9], 1),
+            ([M1, M3, M6, M7, M7, M9, P3, P3, P4, S1, S4, S6, S6, WD], 3),
+            ([M5, M6, M7, M7, P2, P4, P4, P5, P6, P7, S1, S4, S6, N], 2),
+            ([M7, M8, S1, S3, S5, S6, S7, S9, E, S, W, WD, RD, RD], 3),
+            ([M1, M3, M3, M6, P1, P3, P3, P5, P6, P7, P8, P8, P9, P9], 2),
+            ([M4, M6, M6, M6, M7, M8, P5, P5, P9, P9, S5, WD, RD, RD], 2),
+            ([M1, M2, M3, M4, M5, M6, M7, M8, P2, P4, P4, S4, S5, S7], 1),
+            ([M2, M2, M3, M3, M4, M5, P2, P2, P6, P6, P8, S5, S7, E], 2),
+            ([M5, M6, M7, P1, P2, P3, P5, P7, S5, S5, S7, S8, S8, S9], 0),
+            ([M2, M3, M3, M3, M4, M6, M7, M7, M9, P2, P8, S4, S6, WD], 2),
+            ([M1, M2, M3, M4, P1, P2, P3, P6, P8, P9, P9, S3, S4, S7], 1),
+            ([M4, M6, P2, P3, P4, P6, P7, P8, S1, S1, S4, S5, S6, RD], 0),
+            ([M2, M3, M4, M5, M5, M6, M6, P6, P7, P7, P8, S4, S4, S4], 0),
+            ([M4, M5, M6, P4, P4, P5, P5, P6, P7, P8, P8, S4, S6, S9], 1),
+            ([M1, M2, M2, M4, M4, M5, P4, P5, S2, S4, S4, S6, S8, RD], 3),
+            ([P2, P4, P5, P6, P8, P8, P8, P9, S5, S6, S9, N, N, GD], 2),
+            ([M4, M5, M5, P3, P6, P8, P8, S3, S4, S5, S6, S7, S9, E], 3),
+            ([M1, M3, M6, M6, M7, M8, M9, P1, P1, P2, P4, S1, S2, S], 2),
+            ([M4, M5, M6, P4, P5, P6, P7, P8, P8, S4, S4, S5, S7, S8], 1),
+            ([M5, M5, M8, P2, P3, P6, S1, S1, S4, S5, S7, S8, S9, N], 2),
+            ([M3, M5, M6, M6, M8, S1, S1, S2, S5, S5, S6, S7, E, W], 3),
+            ([M4, M4, M8, M9, P4, P5, S1, S2, S4, S7, S8, S8, WD, WD], 3),
+            ([M2, M3, M4, P1, P3, P3, P5, P6, P7, P8, P9, W, RD, RD], 1),
+            ([M3, M7, M9, P1, P4, P7, P8, S2, S3, S3, S4, S5, S8, S9], 3),
+            ([M6, M7, M8, M8, M8, M9, M9, P3, P4, P5, S7, S8, N, N], 1),
+            ([M6, M8, P3, P3, P6, P7, P7, P8, P9, S4, S4, S4, S5, S7], 1),
+            ([M1, M2, M3, M5, M7, M8, M9, S4, S5, S8, S8, WD, WD, GD], 1),
+            ([M5, P3, P7, S2, S3, S3, S8, S8, E, S, N, N, WD, GD], 3),
+            ([P3, P4, P5, S1, S2, S3, S4, S4, S5, S5, S6, S, N, N], 0),
+            ([M2, M3, M7, P4, P5, P6, P7, P9, S3, S6, S7, S8, E, WD], 2),
+            ([M2, M2, M3, M3, M4, M5, M5, M5, M6, M8, M8, P9, S5, S], 2),
+            ([M2, M3, M3, P1, P2, P9, P9, S1, S2, S3, S6, S7, S7, GD], 2),
+            ([M1, M4, P2, P2, P5, P8, S3, S4, S6, S7, S8, N, WD, GD], 4),
+            ([M5, M8, P1, P1, P2, P3, S2, S5, S5, S7, S9, WD, GD, RD], 4),
+            ([M1, M2, M4, M4, M6, M9, P4, P7, S4, S8, E, S, S, WD], 4),
+            ([M3, M3, M5, M6, P1, P4, P5, P6, P7, S1, S3, S8, S8, S8], 1),
+            ([M3, M4, M6, P2, P2, P3, P5, S4, S4, S8, S8, WD, GD, GD], 2),
+            ([M1, M3, M8, P1, P4, P5, P7, P7, P9, S5, S6, S6, S9, N], 4),
+            ([M1, M5, M6, M7, P3, P4, P7, S1, S3, S4, S5, S9, E, S], 3),
+            ([M4, P3, P4, P5, P6, P7, P8, S1, S1, S2, S4, S5, S5, S], 1),
+            ([M3, M3, M3, M6, M8, P2, P4, P5, P6, P7, P7, S3, S3, S5], 1),
+            ([M1, M1, M2, M3, M9, M9, P6, S5, S7, S7, S9, E, W, RD], 3),
+            ([M4, M5, M7, M7, M8, P6, P6, P6, S5, S6, S8, S8, S9, WD], 2),
+            ([M2, M2, M6, M7, P2, P5, P7, P8, S3, S5, S5, S7, N, N], 3),
+            ([M4, M4, M7, M8, M9, P2, P4, P7, P8, S5, S6, S7, S7, N], 1),
+            ([M6, M8, M8, P3, P4, P5, P6, P7, S3, S8, S8, S9, W, W], 2),
+            ([M1, P4, P4, P7, P9, S1, S5, E, S, S, W, W, WD, RD], 3),
+            ([M4, M4, M6, M7, P2, P4, P5, P7, S2, S4, S4, S6, S8, S], 3),
+            ([M4, M4, M5, M7, M8, P9, S3, S4, S6, S6, S9, S, N, N], 3),
+            ([M1, M2, M3, M3, P2, P3, P6, P6, P8, P8, S1, S2, S4, S8], 2),
+            ([M1, M4, M6, P2, P6, P8, P9, S1, S2, S2, S8, W, WD, RD], 5),
+            ([M4, M9, P3, P4, P4, P9, S4, S5, S5, S7, S8, S9, W, RD], 4),
+            ([P2, P3, P5, P6, P7, S1, S2, S2, S3, W, W, W, RD, RD], 0),
+            ([M1, M5, M9, P4, P6, P7, P7, P7, S1, S1, S2, S2, S4, S8], 3),
+            ([M4, M6, P1, P4, P5, P6, P8, P9, P9, S2, S4, S5, S6, E], 2),
+            ([M3, M8, M9, P6, P7, P8, S4, S5, S6, S6, S7, S8, S8, GD], 1),
+            ([M2, M6, M7, P2, P3, P3, P4, P5, P5, S4, S4, S8, WD, WD], 2),
+            ([M3, M3, M4, M6, S1, S3, S3, S4, S5, S6, S7, S8, S8, S9], 1),
+            ([M1, M2, M3, M6, P1, P2, P3, P5, P8, P9, S1, S3, S5, S7], 2),
+            ([M1, M2, M4, M5, M6, P4, P5, P8, S1, S3, S6, WD, GD, GD], 2),
+            ([M9, P2, P4, P7, P8, P8, S1, S4, S5, S8, S9, S, W, RD], 4),
+            ([M1, M1, M2, M2, M4, P3, P4, P4, P5, S2, S2, S3, S6, S], 2),
+            ([M3, M7, M7, P1, P3, P6, P7, S3, S5, S6, S8, S9, S, GD], 3),
+            ([M5, M8, P1, P2, P2, P4, P4, P5, S3, S5, S6, S8, S8, RD], 3),
+            ([M1, M1, M1, M5, M6, P3, P5, P7, P8, P9, S3, S4, WD, WD], 1),
+            ([M7, M7, P2, P2, P2, P6, P6, S6, S7, S8, S8, S, S, S], 0),
+            ([M1, M8, P1, P1, P3, P4, P5, S2, S3, S5, S6, S6, WD, RD], 3),
+            ([M4, M5, M7, M8, M9, P2, P4, S1, S1, S3, S5, S7, S, WD], 2),
+            ([M1, M7, M7, P2, P2, P3, P7, P8, P9, S2, S4, S8, S9, WD], 2),
+            ([M3, M4, M5, M9, M9, P2, P3, P4, P6, P6, S2, S8, S8, RD], 1),
+            ([M3, M7, P1, P4, P6, P9, P9, S6, S8, S9, S9, W, GD, RD], 4),
+            ([M5, M7, M7, P1, P2, P4, P6, P6, P7, P8, P9, S1, S6, E], 3),
+            ([M2, M3, M4, P1, P1, S4, S5, S7, S8, S9, WD, WD, RD, RD], 1),
+            ([M2, M3, M4, M5, M6, M8, P4, P7, S5, S7, E, GD, RD, RD], 3),
+            ([M6, M8, P6, P7, P8, S2, S3, S7, S9, S, N, WD, GD, RD], 3),
+            ([M3, M3, M7, M9, P3, P4, P7, P8, S2, S3, S3, S4, S6, S], 2),
+            ([M4, M5, P2, P3, P3, P5, P6, P6, P8, P8, S7, S8, S8, S9], 2),
+            ([M6, M7, P5, P6, P7, S1, S2, S2, S3, S5, S7, S7, W, W], 1),
+            ([M4, M4, M6, M8, M9, P2, P7, S6, S6, W, W, WD, GD, RD], 3),
+            ([M2, M6, M7, M8, P7, P7, S1, S2, S3, S4, S4, S6, S8, S9], 1),
+            ([M1, M1, M3, M5, S1, S2, S2, S3, S3, S6, S7, S7, S8, E], 1),
+            ([M7, M7, P1, P1, P4, P4, P5, P5, P6, P6, P8, P8, P9, P9], -1),
+            ([M3, M7, M7, M8, P1, P3, P5, P8, P9, P9, S3, S5, S7, RD], 4),
+            ([M1, M4, M4, M6, P3, P4, P5, P6, P6, P8, S2, S5, S8, S8], 3),
+            ([M1, M3, M7, M8, M8, P3, P7, P8, S2, S4, S9, E, S, GD], 4),
+            ([M4, M5, P5, P7, P8, S1, S1, S1, S5, S6, S7, S8, S9, WD], 2),
+            ([M2, M3, M3, M6, M6, P5, P6, P6, S3, S3, S9, S9, E, RD], 1),
+            ([M5, M6, P4, P5, P6, S1, S1, S1, S5, S6, S7, S9, S9, W], 0),
+            ([M4, M6, M6, M7, M8, P3, P4, S2, S5, S6, S7, S9, E, E], 1),
+            ([M2, M6, M6, P4, P7, P7, P7, P8, S1, S4, S6, S6, W, W], 2),
+            ([M2, M3, M4, M7, M8, P1, P2, P2, P5, S4, S6, E, W, W], 2),
+            ([M3, M5, M5, M7, M9, P3, P3, P4, P5, P6, P7, S1, S2, S6], 2),
+            ([M3, M4, M5, P9, S1, S2, S2, S4, S4, S7, S7, S9, RD, RD], 2),
+            ([M1, M2, M3, M6, M8, P3, P4, P4, P6, P8, P8, S3, S6, W], 2),
+            ([M6, M7, S1, S2, S3, S4, S5, S6, S6, S8, S8, S8, N, N], 0),
+            ([M1, M2, M4, M5, M6, P5, P8, P8, P9, S3, S4, S6, S6, S8], 2),
+            ([M1, M2, M3, M7, M8, M9, P2, P4, P6, P8, S3, S4, S7, S8], 2),
+            ([M1, M2, M3, M6, M6, M7, P2, P7, P9, S2, S5, S5, W, WD], 3),
+            ([M2, M6, M6, M8, M9, M9, P2, P3, P7, S2, S6, S6, GD, RD], 3),
+            ([M5, M7, M7, M7, P2, P7, P8, P9, S4, S5, S7, W, W, N], 2),
+            ([M3, M5, M7, M8, P3, P7, P8, P9, S1, S3, S9, S9, S9, E], 2),
+            ([M1, M4, M4, M5, P4, P4, P6, P7, S6, S6, S8, E, E, WD], 2),
+            ([M2, M3, M8, M9, P2, P2, P5, P5, P6, P8, S1, S5, E, GD], 3),
+            ([M2, M2, M2, M6, M6, M6, M8, M8, M9, P3, P4, P6, P6, WD], 1),
+            ([M1, M3, M4, M5, M7, M7, M8, P2, P8, P9, S4, S6, S7, GD], 3),
+            ([M4, P2, P2, P3, P4, P5, P6, S2, S4, S6, S7, S8, WD, GD], 2),
+            ([M5, M5, M6, M8, M8, P1, P4, P4, P5, P5, P7, P7, S3, S6], 1),
+            ([M1, M3, M4, M5, M7, M8, M8, P2, P4, S2, S5, S6, S6, GD], 3),
+            ([M2, M4, M6, M7, P1, P2, P3, P5, P5, P6, P8, W, W, W], 1),
+            ([M3, P2, P3, P3, P5, P6, P8, S1, S3, S3, S4, S5, S6, S6], 2),
+            ([M5, M6, M7, M8, M8, P4, P6, P6, P7, P8, S3, S4, S5, S6], 0),
+            ([M2, M3, M4, P4, S1, S2, S2, S4, S5, S7, S7, S8, E, RD], 3),
+            ([M1, M5, M9, P6, P7, P7, P9, S2, S3, S4, S8, S9, S, S], 2),
+            ([M4, M6, M7, M9, P1, P8, P9, S2, S4, S8, S9, S, WD, GD], 4),
+            ([M2, M6, M8, P2, P3, P6, P6, P8, P8, S4, S7, S, W, N], 4),
+            ([M4, M4, M5, M5, M6, M6, M8, M8, P1, P6, P8, S7, S8, S9], 0),
+            ([M2, M4, M4, P3, P3, P4, P4, P5, S1, S2, S3, S5, S7, S9], 1),
+            ([M2, M4, M5, M5, M8, P1, P1, S1, S2, S2, S3, S5, WD, WD], 2),
+            ([M1, M4, M8, M9, P2, P8, S3, S8, S9, S9, S, W, GD, RD], 5),
+            ([M1, M2, M2, M3, M4, M6, M8, M8, M9, P5, P6, S1, GD, GD], 2),
+            ([M1, M2, M5, M8, M9, P3, P3, P7, S1, S3, S4, E, W, W], 3),
+            ([M2, M3, M3, M4, M8, M9, P4, P5, P7, S3, S4, S6, GD, GD], 2),
+            ([M2, M3, M4, M7, M8, P1, P6, S2, S2, S3, S3, S3, S6, S9], 2),
+            ([M2, M4, M6, M7, M7, M8, M9, P4, P8, S, WD, GD, GD, RD], 3),
+            ([M4, M6, M7, M7, M7, P5, P7, P9, S1, S4, W, N, WD, RD], 4),
+            ([M1, M2, M4, M5, M6, P3, P3, P5, S7, S8, E, E, W, W], 2),
+            ([M1, M1, M1, M2, M4, M4, P1, P2, P5, P5, P7, P7, P8, RD], 2),
+            ([M1, M2, M3, M6, M8, P3, P4, P4, P6, P8, P8, S6, S, W], 2),
+            ([M1, M1, M2, M7, M8, M9, P3, P6, P7, P8, S1, S1, S3, RD], 2),
+            ([M2, M3, M4, M7, M8, P1, S4, S5, S5, S7, S7, N, WD, GD], 3),
+            ([M2, M4, M5, P6, P6, P7, P7, P8, S1, S2, S3, S6, S6, S], 1),
+            ([P6, P7, P8, S3, S4, S6, S7, S8, S, W, W, W, GD, GD], 0),
+            ([M6, M7, M8, P2, P3, P7, P7, P8, S4, S5, S6, S8, S8, WD], 1),
+            ([M3, M4, M6, M7, M7, M8, M8, P1, P2, P7, P9, S6, S8, S9], 3),
+            ([M6, M7, M9, P1, P3, S1, S1, S2, S4, S4, S4, S6, S7, WD], 2),
+            ([M3, M4, M9, P3, P3, P5, P6, P8, P9, S1, S5, S6, E, WD], 3),
+            ([M7, M7, M8, M9, M9, P4, P4, P5, P5, P8, P8, S5, S6, S9], 1),
+            ([M3, M3, M9, M9, P1, P1, P6, P6, P8, P8, P8, S2, S2, S3], 0),
+            ([S2, S3, S3, S4, S5, S6, S6, S7, E, WD, WD, GD, RD, RD], 2),
+            ([M3, M3, M4, M4, M4, M5, M5, M6, S3, S9, S9, W, W, W], 0),
+            ([M3, M4, M4, M7, M8, M9, P4, P6, P7, P7, P8, S6, S7, N], 2),
+            ([M3, M5, M6, M7, M8, P3, P5, P7, P8, S2, S2, S3, S3, S5], 2),
+            ([M1, M2, M4, P1, P9, S3, S6, S6, S7, S8, S, WD, GD, RD], 5),
+            ([M1, M4, M5, P1, P3, P7, P8, S5, S6, S9, S, W, W, WD], 3),
+            ([M1, M2, M3, M6, P3, P4, P4, S4, S5, S6, S6, S6, S, S], 1),
+            ([M1, M2, M3, M8, M8, P2, P6, P7, S1, S2, S3, S4, S5, S6], 0),
+            ([M1, M2, M3, M7, M9, M9, P8, S4, S4, S6, S8, S8, N, WD], 3),
+            ([M2, M6, M7, M8, M8, P2, P2, P4, P6, S3, S3, S6, N, N], 2),
+            ([M3, M4, M6, M6, M6, P4, P9, S2, S3, S4, S8, S8, RD, RD], 1),
+            ([M3, M4, P2, P2, P2, P3, P7, P8, S3, S3, S4, S4, S5, S6], 1),
+            ([M5, M6, M6, P3, P3, P4, P4, P5, S3, S5, S5, S8, S8, S8], 1),
+            ([M3, M3, M6, M7, M8, P7, P8, S1, S2, S3, S5, S8, S8, S9], 1),
+            ([M6, M9, P6, P9, S1, S3, S5, S8, E, S, S, W, WD, GD], 4),
+            ([M3, M4, M5, P2, P3, P4, S3, S4, S5, S6, S6, W, W, N], 0),
+            ([M3, M4, M5, M6, M7, M9, M9, P4, P5, S4, S8, S9, S9, WD], 2),
+            ([M2, M3, M6, M6, M7, P5, P5, P5, P7, P7, S3, S4, W, W], 2),
+            ([M1, M4, M4, M8, P1, P4, P6, S2, S4, S5, S5, S7, W, RD], 4),
+            ([M1, M5, M6, M7, P1, P3, P4, P7, S1, S3, S4, S5, S5, S], 3),
+            ([M2, M2, M3, M4, M6, M7, M7, M9, P3, P4, P4, S3, S7, S8], 2),
+            ([M3, M3, M5, M7, M7, M8, M9, P2, P4, P4, S3, S6, S8, E], 2),
+            ([M9, P1, P3, P4, P6, P8, S2, S4, S4, S4, S7, S8, S8, S9], 2),
+            ([M2, M2, M7, M7, P4, P4, P5, P5, P7, S4, S7, W, GD, GD], 1),
+            ([M8, P4, P6, S1, S3, S4, S4, S6, S7, E, S, S, N, RD], 3),
+            ([M3, M4, M5, P3, P5, P6, P6, P6, S2, S3, S4, S5, S6, S7], 0),
+            ([M2, M3, M4, M5, M6, P5, P7, P8, P9, S1, S2, S3, S3, S6], 1),
+            ([M1, M3, M3, P1, P1, P3, P4, P5, P6, P6, P9, S7, E, E], 2),
+            ([M2, M3, M4, M7, M8, M9, P4, P5, P5, P6, P7, S4, S4, S6], 0),
+            ([M2, M2, M4, M5, M7, M8, P2, P4, P6, S6, S6, S7, S8, E], 2),
+            ([M1, M3, M3, M7, P6, P8, P9, S1, S1, S5, S7, E, WD, RD], 4),
+            ([M1, M2, M3, M7, M8, M9, P5, P5, P6, P6, P8, S1, S2, S2], 1),
+            ([M4, M4, M5, M6, M7, M8, P3, P4, P6, P6, P8, S4, S5, RD], 2),
+            ([M3, M4, M5, M7, M9, S2, S3, S4, S4, S7, S8, S9, S9, S9], 0),
+            ([M3, M4, M7, M9, P1, P2, P4, P5, P7, P8, P9, S6, S8, S8], 2),
+            ([M3, M8, P1, P3, P4, P5, P7, P8, S3, S6, S7, S8, E, RD], 3),
+            ([M4, M7, P1, P2, P2, P3, P3, S1, S2, S5, S6, S8, S, W], 3),
+            ([M2, M4, M4, P3, P4, P4, P7, P8, S1, S3, S3, S4, S8, S8], 2),
+            ([M1, M2, M3, M7, P1, P2, P3, P4, P6, P8, S1, S2, S8, S8], 1),
+            ([M2, M8, M9, P3, P4, P7, P9, S2, S5, S8, W, W, WD, RD], 4),
+            ([M1, M2, M3, M7, P3, P3, P5, P5, S1, S2, S3, S8, S8, S9], 1),
+            ([M6, M7, M7, P1, P3, S2, S2, S3, S3, S4, S5, S7, S9, GD], 2),
+            ([M2, M3, M4, P4, P4, P6, P8, S1, S2, S2, S3, S4, S4, S6], 1),
+            ([M3, M4, M6, M7, P4, P4, P5, P5, P6, S2, S4, S6, S8, W], 3),
+            ([M1, M2, M4, P1, P3, P4, P8, P9, P9, S1, S6, N, WD, GD], 5),
+            ([M2, M3, M4, M7, M8, P4, P5, P6, S2, S3, S3, S4, S4, S5], 0),
+            ([M3, M4, M6, M7, M8, P3, P4, P7, S3, S3, S6, S6, W, WD], 2),
+            ([M2, M3, M5, M8, M8, P5, P5, P6, P6, P8, S1, S1, S2, S2], 1),
+            ([M2, M9, P1, P2, P2, P3, P7, P7, P9, P9, S3, S3, S6, N], 2),
+            ([M2, M2, M4, M5, M5, M7, M8, M9, P2, P3, P6, P7, P8, S3], 1),
+            ([M1, M5, S1, S2, S4, S6, S9, S9, S, WD, WD, WD, GD, GD], 2),
+            ([M2, M4, M7, M7, P5, P8, P8, S7, S8, S8, S9, S, N, N], 2),
+            ([M5, M7, P1, P2, P4, P6, P6, P6, P9, S5, S5, S7, S7, W], 2),
+            ([M2, M2, M2, M4, M7, P6, P8, S2, S4, S5, S6, S7, S7, RD], 2),
+            ([M1, M3, M4, M7, M8, P1, P3, P7, P8, E, S, N, WD, RD], 4),
+            ([M1, M5, M7, M8, M9, P4, P4, P5, P9, S3, S8, S9, S9, GD], 4),
+            ([M1, M1, M5, M8, M8, P3, P3, P5, P8, S1, S1, S2, S6, S7], 2),
+            ([M5, M6, M6, P1, P2, P3, P5, S3, S3, S5, S6, S6, S7, S7], 1),
+            ([P4, P5, P6, P7, S2, S2, S3, S3, S3, S4, S5, S6, S8, S9], 0),
+            ([M5, M5, M6, M7, M7, P1, P3, P4, P9, S4, S4, S7, S8, S9], 1),
+            ([M1, M2, M3, M6, P2, P2, P2, P6, P7, S1, S2, S9, S9, WD], 1),
+            ([M4, M4, M4, M6, M7, M7, P4, P5, P6, S6, S7, S7, S8, S9], 0),
+            ([M1, M3, M7, M8, M9, M9, P9, S1, S1, S2, S2, S9, WD, GD], 3),
+            ([M2, M3, M5, M8, M8, P4, P6, P6, P7, S4, S5, S5, S6, S7], 2),
+            ([M1, M2, M3, P1, P2, P2, P7, P9, S1, S2, S5, S9, WD, WD], 2),
+            ([M4, M5, P1, P6, P6, P8, S1, S2, S3, S4, S5, S7, S8, RD], 2),
+            ([M3, M3, M7, M9, P2, P2, P3, P3, P4, P4, P8, S2, S4, S6], 1),
+            ([M2, M3, P2, P4, P7, P9, P9, S1, S5, S6, S, WD, WD, RD], 3),
+            ([M2, M4, M6, M7, M7, M9, P1, P2, S2, S5, E, E, S, RD], 3),
+            ([M2, M4, M6, P1, P1, P3, P5, P5, P5, S1, S7, S8, S, S], 2),
+            ([M4, M4, M5, M6, M7, M8, M8, P1, P4, P7, S3, S7, GD, GD], 3),
+            ([M2, M3, M4, M6, M7, M9, M9, S3, S4, S5, S5, S6, S7, S8], 0),
+            ([M5, M6, M7, M9, P2, P6, P8, S3, S5, S8, S8, GD, GD, RD], 2),
+            ([M1, M1, M2, M2, M3, M6, P5, P5, P7, P7, P8, P8, S, S], 0),
+            ([M1, M3, M3, M6, M7, M7, P4, P6, P8, S7, S9, S9, N, RD], 3),
+            ([M1, M6, M8, P3, P4, P6, P6, S1, S1, S3, S6, WD, GD, RD], 4),
+            ([M2, M3, M4, P1, P4, P4, P6, P8, S2, S2, S3, S4, S4, S6], 1),
+            ([M1, M3, M4, M6, M6, M7, P2, P6, P7, S3, S6, S6, S6, W], 3),
+            ([M4, M9, M9, P1, P4, P4, P5, P7, S1, S2, S3, S7, W, W], 2),
+            ([M3, M4, M7, M8, M9, P3, P4, P5, S3, S4, S7, S9, E, E], 1),
+            ([M1, M1, M2, M3, M4, M4, M5, P1, P2, P7, P7, P8, S1, S3], 2),
+            ([M1, M2, M4, P1, P1, P5, P7, S2, S4, S4, S5, S6, E, S], 2),
+            ([M3, M4, M6, M6, M7, M8, M9, P2, P3, P4, P5, P6, P7, RD], 0),
+            ([M6, M8, P3, P4, P5, P7, P8, P9, P9, S5, S6, E, N, N], 1),
+            ([M1, M3, M5, M6, M8, M8, P1, P2, P3, P9, S4, S5, S7, S8], 2),
+            ([M2, P1, P2, P7, P8, S5, S6, S7, S7, S8, N, N, GD, RD], 2),
+            ([M4, P1, P3, P3, P4, P5, S1, S2, S2, S2, S5, S5, S6, S7], 1),
+            ([M8, P3, P5, P7, P7, P8, S1, S2, S3, S4, S4, S4, S5, W], 2),
+            ([M2, M4, M4, M6, M7, M8, P1, P3, P5, P5, S6, S6, S7, S7], 2),
+            ([M1, M2, M3, M4, P3, P4, P6, P7, P8, S2, S2, S3, S4, S5], 0),
+            ([M3, M3, P1, P2, P2, P3, P3, P6, P6, S3, S3, S4, S6, S6], 0),
+            ([M3, M6, P3, P4, P4, P5, P6, P8, S3, S4, S5, S9, S, S], 2),
+            ([M6, M8, M8, P1, P2, P2, P7, S1, S3, S5, S6, S6, S6, S7], 2),
+            ([M2, M3, M4, P4, P5, P6, P7, P9, P9, S3, S3, S4, S7, S8], 1),
+            ([M7, M7, P4, P6, P7, P8, S2, S2, S7, S7, S9, E, E, E], 1),
+            ([M4, M4, M4, M6, M8, P3, P4, P5, P5, P6, P7, S3, S3, S5], 0),
+            ([M2, M4, M6, M6, P1, P2, P3, P5, P6, P7, S2, S4, S6, S8], 1),
+            ([M3, M5, P1, P1, P3, P3, P4, P8, S3, S4, S5, S7, S8, S], 2),
+            ([M2, M3, M3, M4, M7, M8, M8, P2, P5, S4, S4, S6, S6, S6], 2),
+            ([M1, M2, M2, M2, M4, M5, M6, P2, P4, P6, P7, S2, S2, S2], 1),
+            ([M1, M1, M5, M6, P7, P8, P9, S1, S2, S3, W, RD, RD, RD], 0),
+            ([M1, M3, M5, P1, P2, P7, P7, P9, S2, S5, S5, S6, S9, W], 4),
+            ([M2, M3, M3, M3, M4, P3, P4, S4, S5, S5, S6, S6, S7, S9], 0),
+            ([M2, M4, M6, M7, M8, M8, P2, P2, P4, P4, P5, S3, S3, GD], 2),
+            ([M6, M7, P2, P2, P4, P4, P5, P7, P7, S2, S3, S8, N, N], 2),
+            ([M6, M7, M8, P1, P7, P7, S1, S2, S3, S4, S4, S6, S8, S9], 1),
+            ([M3, M6, P4, P6, P6, P7, P8, P8, S4, S5, S5, S8, N, N], 2),
+            ([M2, M3, M3, M4, M4, M6, M6, P8, S2, S3, S4, S6, S7, S8], 0),
+            ([M6, P4, P4, P5, P6, P6, S2, S4, S5, S7, N, N, N, GD], 2),
+            ([M3, M4, M7, M8, P2, P5, P8, P8, P9, P9, S4, S4, S6, S8], 3),
+            ([M3, M4, M5, M6, M8, M9, P4, S2, S4, S5, S7, E, S, S], 2),
+            ([M3, M3, M3, P1, P2, P3, P5, P5, S2, S3, S4, S6, S7, S7], 0),
+            ([M3, M7, M9, P3, P6, P8, P9, S1, S3, S8, E, S, WD, GD], 5),
+            ([M3, M4, M5, M6, M7, M8, P2, P3, P4, P6, S2, S7, S8, S9], 0),
+            ([M2, M2, M4, P2, P3, P4, P4, P6, P8, S4, S5, S7, S7, S8], 2),
+            ([M1, M2, M7, M8, P5, P5, P6, P6, S8, S8, S9, RD, RD, RD], 2),
+            ([M1, M2, M3, M6, M6, M7, M8, M9, S4, S5, S6, S7, S8, S9], -1),
+            ([M2, M5, M5, M7, M7, M9, M9, P4, P6, P8, S4, S8, W, N], 3),
+            ([M1, M2, M3, P5, P5, P8, P8, P8, S2, S3, S4, WD, WD, WD], -1),
+            ([M2, M4, M7, M8, M9, P3, P5, S3, S6, S7, S7, S9, GD, GD], 2),
+            ([M2, M4, M4, M5, M8, M9, P2, P6, S3, S5, S7, S8, S9, GD], 3),
+            ([M2, M3, M3, M4, M6, M7, M9, M9, S3, S4, S5, S6, S7, S8], 0),
+            ([M5, M7, M9, P3, P6, P8, S3, S3, S4, S5, S6, S7, S9, E], 2),
+            ([M1, M6, M6, P1, P2, P6, P8, S1, S2, S8, E, W, WD, RD], 4),
+            ([M4, M5, M7, M8, M8, P1, S5, S6, S6, S8, S8, S9, E, RD], 3),
+            ([M3, M3, M5, P3, P4, P6, P7, P7, P7, S6, S8, N, N, RD], 2),
+            ([M2, M3, M3, M8, P4, P5, P6, P6, P7, S1, S1, S3, S5, WD], 2),
+            ([M2, M3, M5, M7, M7, P5, S4, S5, W, WD, WD, RD, RD, RD], 2),
+            ([M1, M2, M3, M6, M9, P3, P4, P4, S4, S5, S6, S6, S6, S], 2),
+            ([M2, M5, M6, M6, M8, P2, P3, P4, P6, S2, S4, S5, S7, W], 3),
+            ([M2, M2, M3, P4, P5, P6, S5, S5, S7, S7, S7, S8, N, N], 1),
+            ([M2, M3, M3, M5, M7, P1, P3, P5, P7, P8, S2, S5, S8, W], 4),
+            ([M2, M2, M5, M9, P7, P9, S4, S6, S8, S8, E, W, N, GD], 4),
+            ([M4, M5, P1, P2, P3, P4, P5, P7, P8, P9, S2, S5, S5, S9], 1),
+            ([M3, M4, M5, M8, M9, P1, P2, P6, P8, P8, S2, S4, S6, S9], 2),
+            ([M2, M5, M6, P1, P2, P2, P4, S1, S2, S3, E, S, S, GD], 2),
+            ([M3, M5, M5, M7, M8, P4, P5, P6, P7, S1, S2, S4, S5, RD], 2),
+            ([M2, M3, M4, M8, P1, S4, S5, S7, S8, S9, WD, WD, RD, RD], 1),
+            ([M3, M4, M5, M9, P4, P4, P5, P6, S7, S8, S9, N, N, N], 0),
+            ([M3, M4, M5, P1, P3, P5, P6, P6, P7, S1, S2, S3, GD, GD], 0),
+            ([M2, M6, P4, P5, P5, P6, P7, S1, S6, S7, E, S, N, N], 3),
+            ([M2, M3, M8, M9, P4, P4, P8, P9, S2, S3, S5, S7, S9, N], 3),
+            ([S3, S4, S5, S5, S6, S6, S6, S8, S9, S9, S, S, WD, WD], 1),
+            ([M1, M2, M3, M6, M7, P4, P8, S1, S3, S3, S5, S6, S7, S7], 2),
+            ([M2, M4, M4, M5, M5, M7, M9, P6, S2, S5, S6, S7, S, N], 3),
+            ([M3, M5, M5, M8, M9, P1, P5, P6, P6, P8, P8, P8, GD, RD], 3),
+            ([M2, M2, M7, P3, P4, P5, P7, P7, S1, S1, S7, S8, RD, RD], 2),
+            ([M2, M2, M7, M8, M9, P5, P5, P7, P8, P9, S1, S2, S8, E], 1),
+            ([M7, M8, P1, P4, S3, S5, S6, S9, E, S, W, WD, RD, RD], 5),
+            ([M1, M8, M9, M9, M9, P1, P2, P4, P4, P7, S1, S4, S5, S6], 2),
+            ([M3, M4, P2, P7, P9, S4, S5, E, E, E, S, W, W, W], 2),
+            ([M1, M5, M5, M6, M7, M7, M9, P2, P4, P6, S2, S2, WD, WD], 2),
+            ([M3, M4, M5, P4, P5, P6, P7, S1, S1, S1, S3, S4, N, N], 0),
+            ([M1, M8, M9, M9, M9, P4, P4, P5, P5, P6, P6, S2, S4, S8], 1),
+            ([M4, M7, M8, M8, P2, P2, P5, P6, P7, P7, P8, S8, E, WD], 3),
+            ([M1, M6, P1, P6, P6, P7, P8, S2, S3, S6, S9, S9, E, RD], 4),
+            ([M2, M3, M3, M4, M5, P5, P6, P7, P7, S2, S5, S5, S, S], 1),
+            ([M1, M1, M1, M2, M5, P3, P3, P5, S2, S6, E, E, E, N], 3),
+            ([M1, M3, M3, M8, M9, P4, P5, P5, P9, S4, S6, S7, W, WD], 4),
+            ([M2, M4, M5, M5, M9, P2, P3, P5, P8, P8, S6, S6, S7, GD], 3),
+            ([M1, M3, M8, M9, P3, P7, P8, S5, S7, S8, E, WD, RD, RD], 3),
+            ([M2, M5, M9, M9, P4, S1, S1, S2, S3, S4, S5, S6, S7, RD], 2),
+            ([M4, P1, P3, P4, P5, P8, P9, S2, S3, S5, S5, S6, N, N], 2),
+            ([M4, M5, M6, M6, P4, P5, P5, P6, P7, P7, P7, S3, S5, S5], 1),
+            ([M2, M3, M4, P3, P4, P5, P5, P6, P7, S4, S4, S4, S5, S5], -1),
+            ([M1, M2, M3, M4, M6, M7, M8, P3, P3, P4, P6, S7, S8, S9], 0),
+            ([M2, M3, M4, M5, M5, M7, P3, P7, S4, S4, S5, S7, GD, GD], 2),
+            ([M1, M2, M3, M4, M5, M8, M9, S2, S, W, N, N, N, GD], 2),
+            ([M1, M2, M3, M7, M9, P1, P5, P6, P9, S2, S4, S7, S7, GD], 2),
+            ([M1, M1, M2, M9, P2, P6, P6, S1, S5, S6, S7, S7, S9, E], 3),
+            ([M6, M8, P2, P3, P7, P8, S1, S2, S3, S3, S5, S5, S7, S8], 2),
+            ([M3, M5, P1, P1, P2, P3, P4, P6, P6, S4, S6, S7, S9, S], 2),
+            ([M4, M6, M8, P2, P7, P9, S3, S4, S5, S6, S7, S8, S8, S9], 2),
+            ([M4, M5, M6, M8, M9, P2, P3, P4, P6, P8, P8, S5, S6, S7], 0),
+            ([M5, M7, M8, P5, P5, P6, P6, P8, S8, S8, S9, RD, RD, RD], 2),
+            ([M2, M3, M4, M6, M7, M8, P3, P3, P4, P5, S3, S3, WD, WD], 0),
+            ([M2, M3, M8, P2, P3, P4, P4, P5, P7, P8, P9, S1, S2, S5], 2),
+            ([M1, M3, M5, M6, M7, M8, P5, P6, P8, P8, S1, S2, S3, S4], 1),
+            ([M4, M5, M6, P2, P4, P4, P5, P6, S2, S2, S6, S7, S8, GD], 0),
+            ([M2, M3, M4, P1, P2, P3, P3, P4, P5, P7, S1, S1, S7, S8], 0),
+            ([M4, M4, M5, M6, M7, M8, P4, P5, P5, S3, S4, S5, GD, GD], 1),
+            ([M2, M9, P4, P7, P8, P8, P9, S6, S9, E, S, W, N, GD], 5),
+            ([M2, M6, M8, M9, P7, P8, P9, S1, S3, S7, S9, E, WD, RD], 3),
+            ([M3, M4, M5, M7, M7, P1, P3, P3, P3, S3, S4, S5, S6, S6], 0),
+            ([M3, M6, M6, M9, P1, P5, P7, P7, P7, P9, S8, S9, S, S], 3),
+            ([M2, M4, M6, M6, M7, P6, P6, P7, S2, S3, S7, S9, W, W], 3),
+            ([M1, M3, M7, M7, M9, P3, P5, P8, S2, S3, S6, S7, S, GD], 3),
+            ([M1, M3, M5, M8, M8, P3, P4, P5, P6, P7, P8, S3, S4, S6], 1),
+            ([M1, M1, M2, M2, M3, P2, P2, P6, P7, P7, P8, S2, S7, S8], 1),
+            ([M6, P1, P1, P2, S6, S7, S7, S8, S9, E, E, E, N, N], 1),
+            ([M1, M2, M3, M4, M5, M5, M6, S1, S2, S3, S4, S5, S9, S9], 0),
+            ([M3, M7, M9, P6, P7, P8, S1, S2, S3, S4, S8, GD, RD, RD], 2),
+            ([M1, M2, M4, M5, M6, P5, P6, P7, S2, S3, S6, E, GD, RD], 2),
+            ([M2, M4, P1, P1, P2, P3, P3, P8, P9, S4, S5, S6, S, S], 1),
+            ([M6, M6, P1, P2, P3, P6, P7, S2, S3, S4, S4, S7, S7, S8], 1),
+            ([M5, M6, P6, P8, S2, S3, S6, S8, S8, S9, S9, S9, S, W], 2),
+            ([M1, M2, M2, M7, M8, M8, M9, P4, P8, S3, S5, WD, RD, RD], 3),
+            ([M5, M6, M6, M8, P2, P3, P4, P6, S2, S4, S5, S7, S8, W], 3),
+            ([M1, M2, M2, M3, M7, M7, M8, M8, P4, P5, P6, S2, W, W], 1),
+            ([M2, M4, M6, M7, M8, M9, M9, P8, P9, S4, S5, S6, S6, S7], 1),
+            ([P1, P4, P5, P6, P7, P8, P8, S6, S8, E, S, W, GD, RD], 4),
+            ([M3, M4, M5, P3, P4, P5, P8, P8, P8, S3, S5, S8, S8, E], 0),
+            ([M2, M6, M6, M7, M9, P1, S3, S3, S3, S4, S5, S7, E, N], 3),
+            ([M2, M4, M5, M5, P1, P7, P8, P9, S1, S1, S3, S5, S8, E], 2),
+            ([M5, M6, M7, M8, M9, P1, P2, P3, P6, P8, S3, S7, S, RD], 2),
+            ([M6, M8, P3, P4, P5, P6, P6, P7, P8, P8, S4, S6, S9, N], 2),
+            ([M5, M6, P1, P4, P6, P7, P7, P8, P8, P8, S1, S1, S7, S], 2),
+            ([M1, M2, M4, M5, M6, P6, P7, P9, S1, S3, S4, S6, RD, RD], 2),
+            ([M2, M4, M5, M7, M7, M9, P2, P3, P7, S1, S2, S9, RD, RD], 3),
+            ([M2, M6, M8, M9, M9, P2, P3, P6, P7, S3, S4, S7, S7, S8], 3),
+            ([M2, M3, M8, M9, M9, P1, P5, P8, P9, S4, S4, S5, S6, S6], 2),
+            ([M4, M9, M9, P3, P6, P7, P7, P8, S3, S3, S5, S6, S9, GD], 3),
+            ([M3, M4, P4, P5, P6, P7, P9, S3, S3, S5, E, N, WD, WD], 2),
+            ([M6, M6, M7, M7, P5, P8, P8, P9, S1, S1, S2, S2, S3, S9], 1),
+            ([M1, M2, M7, M7, M7, P3, P5, P9, S5, S7, E, WD, GD, RD], 3),
+            ([M2, M3, M4, P4, P5, P5, P5, P6, P8, P9, S3, S3, S5, S6], 1),
+            ([M2, M2, M7, M7, M8, P7, P7, S3, S3, S5, S5, S8, W, WD], 1),
+            ([M7, M8, M9, M9, P1, P2, P2, P7, P9, S8, S9, WD, RD, RD], 2),
+            ([M1, M3, M5, P1, P3, P8, S6, S8, S, N, WD, WD, GD, RD], 4),
+            ([M2, M2, M3, P1, P3, P8, S1, S7, S8, S9, S, WD, WD, RD], 3),
+            ([M3, M4, M6, M7, P2, P6, P7, P8, S2, S3, S4, S8, S8, S9], 1),
+            ([M4, M5, M8, M8, P2, P2, P5, P7, S1, S2, S3, S9, GD, GD], 2),
+            ([M2, M6, P1, P2, P2, P4, P8, S1, S2, S3, E, S, GD, RD], 4),
+            ([M1, M1, M5, P2, P2, P4, P6, P6, P8, S1, S5, S7, GD, RD], 3),
+            ([M3, M4, M4, M5, M5, P5, P6, S2, S2, S4, S6, S6, S7, N], 2),
+            ([M5, M7, M9, P1, P2, P4, P6, P9, S2, S6, S8, S, S, W], 3),
+            ([M7, M9, M9, P2, P5, P6, P8, P9, S3, S4, E, WD, WD, GD], 3),
+            ([M2, M3, M5, M7, M9, S4, S5, S6, S6, S7, S8, S8, S8, GD], 1),
+            ([M3, M4, M6, M7, P5, P9, S2, S2, S4, S7, S8, S, W, WD], 4),
+            ([M5, M5, M7, M7, M8, P4, P6, S2, S3, S3, S9, S, WD, GD], 3),
+            ([M2, M4, M5, M6, M7, P3, P4, P5, S2, S4, S4, S6, S, S], 1),
+            ([M5, M5, M6, P3, P4, S2, S2, S3, S3, S4, S4, S6, W, GD], 2),
+            ([M3, M8, M9, P2, P3, P4, P5, P6, P8, P8, P9, S4, S5, RD], 2),
+            ([M2, M3, M8, M9, P1, P3, P7, P7, P8, S2, S3, S4, S5, W], 2),
+            ([M2, P2, P6, P8, S2, S3, S5, S6, S6, S7, E, WD, WD, GD], 3),
+            ([M2, M4, M6, P1, P1, P2, P3, P3, S4, S5, S6, S6, S, S], 1),
+            ([M2, M4, M7, M8, M9, P2, P3, P8, P8, P8, S1, S2, S3, WD], 1),
+            ([M6, M8, P1, P1, P6, P7, P8, S2, S3, S4, S5, S6, S7, S9], 0),
+            ([M4, M7, M8, P6, P7, P8, P9, S3, S4, S5, S7, S8, WD, GD], 2),
+            ([M4, M6, M8, P5, P6, P6, S1, S1, S2, S3, S3, S5, S7, S8], 2),
+            ([M5, M8, P8, S2, S2, S2, S3, S3, S4, S5, S7, S8, WD, GD], 3),
+            ([M1, M2, M3, M5, P5, S2, S4, S5, S7, S7, S8, S8, S9, S9], 1),
+            ([M3, M4, M4, M6, M8, P6, S5, S6, S6, S7, S8, S9, S, S], 2),
+            ([M2, M2, M2, M4, M4, M4, M6, M6, S1, S2, S3, S3, S4, W], 0),
+            ([M2, M5, M9, P4, P6, P9, S2, S2, S5, S7, E, W, WD, RD], 5),
+            ([M3, M4, M5, M5, M7, M7, M8, M8, S4, S5, S6, S6, S7, E], 1),
+            ([M3, M5, M8, M9, M9, P3, P6, S1, S3, W, N, GD, GD, RD], 4),
+            ([M3, M5, M6, M8, M9, P4, P5, P6, P7, S2, S5, E, W, W], 3),
+            ([M4, M5, M5, M6, M7, P3, P5, P7, P7, S3, S5, S6, S7, E], 1),
+            ([M3, M4, M5, M5, M8, M9, P2, P3, P5, P6, S2, S4, S5, S6], 2),
+            ([M3, M5, M7, M8, P5, P6, P6, P8, P8, S7, S8, S9, S9, GD], 2),
+            ([M2, M3, M6, M7, P1, P1, P1, P8, S1, S1, S2, S2, S3, S3], 1),
+            ([M1, M2, M2, M5, M8, M9, P6, P7, P8, P9, S2, S6, E, GD], 4),
+            ([M1, M4, M5, M7, M9, P1, P1, P2, P4, P6, P6, S7, S7, S9], 3),
+            ([M2, M3, M3, M4, M7, M7, M8, M9, M9, P2, P2, P5, S5, S8], 2),
+            ([M3, M3, M6, M6, M6, P3, P4, P5, P6, S3, S4, S5, S6, S7], 0),
+            ([M4, M5, M6, M6, M7, M8, P6, P8, S1, S2, S3, S4, S4, S8], 0),
+            ([M1, M2, M5, M6, M8, P5, P5, P7, P7, P8, P8, S6, S, W], 3),
+            ([M5, M9, P1, P2, P3, P6, S1, S3, S4, S6, S7, S, W, RD], 4),
+            ([M3, M4, M5, P1, P2, P3, P3, P7, P8, S4, S4, S7, S8, WD], 1),
+            ([M2, M5, M5, M6, M7, M7, P1, P6, P8, P8, S7, E, N, GD], 3),
+            ([M2, M5, M6, M6, M6, M9, P2, P4, P5, S8, GD, GD, GD, RD], 3),
+            ([M1, M3, M6, M7, M9, P3, P3, P4, P9, S1, S4, S6, S6, WD], 4),
+            ([M2, M3, M4, P2, P2, P4, P4, P5, P8, P8, P8, S5, S6, W], 1),
+            ([M1, M2, M2, M3, M5, M6, M9, P6, P6, S7, S8, S, S, W], 2),
+            ([M8, M8, M9, P1, P2, P3, P3, P4, P8, S4, S5, WD, WD, GD], 2),
+            ([M2, M3, M6, M7, P6, P7, S2, S3, S3, S4, S4, S8, S8, W], 2),
+            ([M7, M7, P1, P2, P3, P5, P5, P6, S7, S7, S, W, N, WD], 3),
+            ([M1, M2, M7, M8, P3, P5, P6, P7, P8, S6, S8, S9, E, E], 2),
+            ([M5, M7, M8, P7, P8, P9, S1, S2, S2, S5, S9, W, W, GD], 3),
+            ([M1, M5, M5, P3, P4, P6, S1, S2, S4, S9, W, WD, WD, RD], 4),
+            ([M1, M2, M2, M6, P2, P7, P7, S2, S3, S4, S6, E, N, RD], 4),
+            ([M2, M4, M5, M6, M8, P1, P3, P4, S2, S2, S5, S7, S, WD], 3),
+            ([M1, M1, M3, M7, P5, P6, P8, P8, S3, S5, E, GD, GD, RD], 3),
+            ([M5, M5, M6, P2, P2, S3, S3, S4, S4, S6, S6, S8, S8, S9], 0),
+            ([M1, M1, M2, M4, M5, P2, P2, P2, S2, S3, S4, S7, S8, S9], 0),
+            ([M3, M6, M9, P1, P4, P5, P8, P9, S1, S3, S7, S9, GD, GD], 3),
+            ([M2, M3, M4, M5, M6, M7, P1, P4, P6, P8, P8, S1, S8, GD], 2),
+            ([P2, P2, P3, P4, P4, P5, P6, P6, P8, S4, S5, W, W, W], 1),
+            ([M1, M4, P2, P9, S4, S5, S8, E, E, S, W, W, WD, RD], 4),
+            ([M1, M1, M3, M6, M8, P3, P5, P5, P5, S7, S8, S, WD, RD], 3),
+            ([M3, M9, M9, P1, P5, P7, P7, P9, S4, S5, S6, S6, S6, S8], 2),
+            ([M8, S1, S3, S5, S6, S7, S9, E, S, W, WD, GD, RD, RD], 4),
+            ([M1, M2, M3, M4, M5, M5, M6, P6, P7, P8, S3, S4, RD, RD], 0),
+            ([M4, P2, P7, P9, S1, S3, S4, S5, S8, S8, S9, S, N, GD], 4),
+            ([M5, M7, P1, P4, P6, P6, P6, P9, S5, S5, S9, W, W, GD], 3),
+            ([M5, M5, M8, P2, P3, P5, P5, S4, S5, S6, S6, S6, S8, E], 2),
+            ([M1, M3, M6, P5, P7, S3, S5, S7, S9, S9, E, E, WD, RD], 3),
+            ([M1, M1, M1, M5, M7, P4, P5, P5, S4, S5, S8, S8, RD, RD], 2),
+            ([M3, M4, M6, M7, M8, P2, P4, P4, P8, S3, S6, S8, GD, RD], 3),
+            ([M1, M2, M8, M9, P4, P5, S3, S4, S9, E, S, WD, GD, RD], 4),
+            ([M1, M2, M8, M8, M9, P2, P3, P9, S1, S2, S3, S6, S8, RD], 2),
+            ([M1, M1, M2, M2, M3, P5, P7, S1, S2, S3, S4, N, WD, WD], 1),
+            ([M1, M1, M3, M7, M7, M9, M9, P5, P6, P6, P8, S5, E, W], 2),
+            ([M3, M3, M9, P3, P5, P7, P7, P8, S2, S6, S7, S, S, S], 2),
+            ([M1, M1, M2, M6, M8, P3, P5, P7, P7, P8, P9, S6, S7, S7], 2),
+            ([M5, M6, M9, P6, P8, P9, S2, S4, S6, S9, E, S, W, WD], 5),
+            ([M2, M2, M4, M4, M7, M8, M8, P6, P6, P9, S4, S5, N, WD], 2),
+            ([M4, M4, M6, P1, S1, S3, S5, S5, S6, S7, S7, S8, E, E], 2),
+            ([M4, M5, M6, M7, M8, P8, P9, S6, S7, S9, E, E, N, N], 2),
+            ([M6, M7, M7, P4, P4, P6, P6, P7, P7, P8, S7, S7, S8, S8], 0),
+            ([M2, M4, M7, M8, M8, M9, P2, P7, S2, S9, S9, S, N, GD], 4),
+            ([M1, M2, M7, M8, M9, P2, P4, S1, S2, S4, S5, S9, W, RD], 3),
+            ([M4, M5, M5, P1, P2, P3, P3, P6, P7, S5, S5, S8, S9, S9], 2),
+            ([M2, M2, M4, P5, P6, P7, P7, P8, P9, S3, S4, S5, S9, S9], 0),
+            ([M4, M6, M6, P1, P6, P7, P8, P9, P9, S2, S2, S3, N, N], 2),
+            ([M4, M5, M6, M7, M8, M8, M9, P1, P2, P3, P4, P4, S3, S4], 0),
+            ([M2, M3, M3, M8, P1, P1, P2, S2, S2, S2, S4, S4, E, WD], 2),
+            ([M1, M4, M7, M9, P4, P7, P7, P8, S1, S2, S3, S5, W, W], 3),
+            ([M4, M8, M9, M9, P5, P7, S4, S4, S, S, WD, GD, RD, RD], 2),
+            ([M2, M4, P5, P5, P6, P7, P7, P8, P9, S5, S6, S7, S8, S], 1),
+            ([M4, M5, M7, M8, M8, P8, S4, S5, S6, S6, S8, S8, E, RD], 3),
+            ([M6, P3, P4, P4, P5, P6, S3, S5, S8, S9, S9, S, S, RD], 2),
+            ([M3, M4, M5, M5, M5, M6, M7, M7, P1, P2, P3, S4, S5, S6], 0),
+            ([M5, M6, M7, M7, P6, P6, P6, S2, S4, S6, S6, E, N, N], 1),
+            ([M2, M2, P4, P4, P6, P8, S4, S5, S6, S8, S8, W, WD, WD], 2),
+            ([M1, M2, M9, P2, P3, P5, P5, S2, S3, S8, S8, S8, E, S], 2),
+            ([M7, M9, P1, P1, P2, P3, P3, P5, P9, S4, S7, S8, S8, S], 3),
+            ([M6, M8, P5, P6, P6, P7, P8, S1, S2, S3, S6, S6, S8, S8], 1),
+            ([M4, M6, P1, P2, P3, P4, S2, S3, S4, S5, S5, S6, S7, S8], 0),
+            ([M1, M1, M3, M3, M5, M8, M9, P5, P6, S3, S4, S8, S9, S9], 3),
+            ([M1, M3, M4, M4, M5, M7, M8, M9, S2, S3, S4, S6, S8, E], 1),
+            ([M1, M1, M3, M8, P8, P8, S2, S3, S4, S6, S8, E, RD, RD], 2),
+            ([M5, M5, M6, M8, M8, P3, P6, S3, S4, S5, S6, S8, W, N], 3),
+            ([M3, M5, M8, M9, P1, P2, P3, P4, P5, P7, S1, S7, E, WD], 3),
+            ([M3, M4, M5, M5, M6, P3, P4, S3, S4, S5, S6, S6, S8, E], 1),
+            ([M4, M4, M5, M7, M7, M8, P1, P2, P3, P7, S8, W, WD, GD], 3),
+            ([M3, M7, M9, P1, P1, P2, P3, P5, S2, S4, S7, N, N, RD], 3),
+            ([M1, M1, M2, M3, M5, M6, M8, M8, P2, P3, P5, P8, S7, E], 3),
+            ([M1, M5, M9, P3, P6, P8, P9, P9, S1, S1, S4, E, GD, RD], 4),
+            ([M4, M5, M6, M7, M7, P2, P3, P4, S2, S3, S6, S6, S7, S8], 0),
+            ([M5, P1, P1, P2, P5, P8, S5, S8, S8, S9, E, WD, GD, RD], 4),
+            ([M3, M6, M7, P6, P7, P9, P9, S2, S3, S5, S7, E, E, S], 3),
+            ([M1, M1, M3, M5, M8, M8, P3, P5, P6, P7, P9, S2, S7, S8], 2),
+            ([M5, M5, M6, M6, P3, P6, P7, S1, S2, S3, S3, S6, S9, S9], 2),
+            ([M1, M9, M9, P2, P6, P9, S3, S4, S4, S5, S6, S7, W, RD], 4),
+            ([M5, M7, P1, P3, P5, P5, S5, S7, S9, E, N, WD, GD, GD], 3),
+            ([M1, M6, M7, M7, M7, M8, P3, P4, P6, P7, P8, S5, S6, S7], 0),
+            ([M3, M3, M7, M8, M9, P2, P4, P5, P6, P7, P9, P9, S5, S8], 1),
+            ([M1, M9, M9, P1, P3, P3, P6, P6, P9, P9, S4, S6, S8, W], 2),
+            ([M4, M4, M5, M7, P3, P4, P4, P7, P9, P9, S3, S3, GD, GD], 1),
+            ([M2, M2, M5, M6, M8, P6, P7, P8, S4, S5, E, WD, WD, WD], 1),
+            ([M1, M2, M3, M5, M6, M7, M7, M8, M9, M9, P1, P2, S4, S5], 1),
+            ([M3, M4, M4, M5, M6, P1, P2, P2, P7, P8, S7, S9, S9, S9], 1),
+            ([M4, M5, M6, M7, M7, M8, P3, P4, P6, P7, S1, S3, S5, GD], 2),
+            ([M1, M2, M3, M3, M7, M8, P5, P9, S1, S1, S2, S5, S7, S8], 3),
+            ([M2, M4, P4, P4, P6, P7, P8, S1, S2, S3, W, GD, GD, GD], 0),
+            ([M1, M6, P2, P2, P6, P8, P9, S1, S2, S3, S8, W, WD, RD], 4),
+            ([M1, M2, M3, M6, M7, M9, M9, P7, P8, P8, S5, S, WD, RD], 3),
+            ([M1, M2, M2, M3, M3, P9, P9, P9, S1, S5, S6, S6, S7, S8], 1),
+            ([M4, M9, P2, P2, P5, P5, S1, S3, S3, S4, E, S, WD, WD], 2),
+            ([M2, M2, M4, M6, P2, P4, P5, P7, P8, S3, S4, S5, S9, S9], 2),
+            ([M2, M3, M4, M5, M7, M9, P4, P6, P7, P8, P9, S2, S2, S8], 1),
+            ([M4, M5, M6, M7, M8, M9, P4, P5, P6, P9, P9, S1, S2, S3], -1),
+            ([M1, M4, M5, M5, M8, M9, P4, P4, P5, P8, S4, S5, S7, S], 4),
+            ([M5, M5, M7, M8, M8, P3, P4, P6, P6, S4, S5, S5, N, N], 1),
+            ([M2, M4, M4, P3, P3, P5, P5, P6, P7, P8, S1, S2, S3, E], 1),
+            ([M5, M8, P4, P6, P8, P9, P9, S5, S6, S8, S8, S9, N, N], 3),
+            ([M3, M4, M4, M9, M9, P6, P9, S1, S1, S2, S3, S5, S6, S], 3),
+            ([M4, M5, P1, P2, P2, P5, P6, S1, S2, S2, S3, S4, S5, S7], 2),
+            ([M5, M5, M7, M8, M9, P2, P3, P6, S1, S4, S5, S7, S8, S9], 1),
+            ([M3, M3, M4, M6, M6, M8, M8, M8, S2, S2, S3, S7, S8, S9], 1),
+            ([M1, M2, M3, M7, M9, P2, P4, S1, S4, S5, S6, S6, S7, S8], 1),
+            ([M2, M5, M6, M6, M6, M9, P2, P4, P5, S8, E, GD, GD, GD], 3),
+            ([M1, M2, M3, M8, M9, M9, M9, P4, P5, S1, S3, S3, S4, S5], 1),
+            ([P2, P3, P6, P7, P8, S1, S2, S3, S5, S5, S6, S7, S8, E], 0),
+            ([M3, M4, M5, M9, P4, P5, P5, P7, P9, S2, S6, S7, S8, GD], 2),
+            ([M2, M4, M6, P5, P6, P7, P7, P8, P9, S3, S4, S5, S9, S9], 0),
+            ([M3, M9, P1, P1, P3, P3, P5, P7, S5, S8, S9, S9, S9, GD], 3),
+            ([M2, M3, M6, M7, P1, P2, P5, P6, P7, P9, S3, S4, S7, E], 3),
+            ([P2, P3, P5, P5, P5, P8, P8, P8, S1, S2, S4, S6, S8, GD], 2),
+            ([M4, M4, M8, P2, P2, P3, P4, P6, P7, P8, S4, S6, S7, S8], 1),
+            ([M5, M6, M7, M9, M9, P1, P5, P5, P5, P6, P7, S4, S5, S6], 0),
+            ([M4, M4, M4, M6, M6, M6, P2, P4, S2, S4, S5, S7, S8, S9], 1),
+            ([M7, M7, P3, P4, P5, P8, P8, S1, S3, S5, S5, S7, S8, S], 2),
+            ([M1, M1, M2, M3, M4, M4, M6, M8, P3, P5, P7, S1, S2, S4], 2),
+            ([M7, M7, M8, M9, P1, P3, P6, P7, P8, S1, S3, S7, S9, WD], 2),
+            ([M1, M1, M2, M4, M5, M6, P1, P1, P8, S4, S6, S7, S8, GD], 2),
+            ([M3, M5, P1, P1, P3, P4, P7, P8, S3, S4, S5, S7, S8, N], 2),
+            ([M5, M6, M6, P5, P6, P7, P8, P8, S5, S6, S7, S7, S7, S8], 1),
+            ([M6, M6, P2, P3, S1, S1, S1, S3, S4, S5, S6, GD, GD, GD], 0),
+            ([M1, M3, M5, M6, M8, M8, P1, P2, P3, S4, S5, S7, S8, W], 2),
+            ([M2, M4, M5, M9, P5, P6, P6, P7, S4, S9, E, N, N, RD], 4),
+            ([M2, M3, M3, M4, M7, M7, P3, P4, P5, S2, S3, S7, S8, S9], 0),
+            ([M3, M5, P1, P1, P2, P4, P9, S1, S5, S8, N, GD, GD, RD], 4),
+            ([M4, M7, M9, P5, S3, S3, S4, S6, S7, S7, S9, S9, S9, GD], 2),
+            ([M1, M1, M2, M3, M8, M9, P2, P6, P6, P9, S1, S2, S2, GD], 3),
+            ([M2, M2, M3, M7, M8, M9, M9, P4, P4, S4, S8, S9, E, RD], 3),
+            ([M8, P1, P1, P2, P7, P8, S5, S5, S6, S7, S7, S7, N, N], 2),
+            ([M8, P1, P4, P4, P5, P6, P8, P9, S2, S3, S5, S7, WD, GD], 3),
+            ([M2, M5, M6, P2, P4, P6, P8, P8, P8, S4, S6, S7, S9, GD], 3),
+            ([M2, M5, M8, P1, P1, P3, P5, P7, P8, S1, S4, S9, WD, GD], 5),
+            ([M4, M8, P1, P3, P4, P7, S4, S5, S5, E, S, N, WD, RD], 5),
+            ([M5, P4, P6, P7, S1, S2, S5, S6, S8, E, N, N, WD, GD], 4),
+            ([M1, M1, M3, M6, M7, M8, P4, P6, P7, S4, S5, S6, W, GD], 2),
+            ([M2, M3, M3, M5, M6, M7, P4, P5, S3, S3, S3, S8, W, W], 1),
+            ([M5, M7, M8, M9, P2, P5, P7, P8, S5, S7, S8, S9, W, W], 2),
+            ([M2, M3, P2, P4, P4, P5, P6, S3, S4, S6, S6, S6, RD, RD], 1),
+            ([M2, M5, M6, P1, P2, P4, P4, S2, S3, S8, S9, S, N, GD], 3),
+            ([M7, P3, P3, P4, P4, P5, S5, S5, S5, S6, S7, S7, S8, S9], 0),
+            ([M1, M2, M2, M5, M7, M8, M9, M9, M9, P3, P5, S4, S6, E], 2),
+            ([M3, M4, M6, M7, M8, M9, P3, P4, P5, P6, P6, P7, S2, S7], 2),
+            ([M5, M5, M7, M8, P3, P4, P8, S4, S5, S7, S7, S8, W, W], 3),
+            ([M4, M7, M8, M9, M9, P1, P3, P3, P4, P4, P5, P8, E, W], 3),
+            ([M3, M4, M5, M5, M6, P2, P4, S3, S4, S6, S7, S, S, N], 2),
+            ([M6, M9, M9, P4, P5, P7, P7, S1, S2, S3, S3, S4, W, WD], 2),
+            ([M8, M8, P3, P3, P6, P6, P7, P8, P8, S2, S2, S7, S, N], 1),
+            ([M2, M3, M4, M5, M5, M6, P1, P1, P3, S4, S5, S6, RD, RD], 1),
+            ([M1, M2, M4, M4, M4, M6, P2, P7, P8, P9, S5, S8, S9, GD], 2),
+            ([P2, P3, P4, P5, P5, P5, S1, S1, S6, S7, S8, WD, RD, RD], 0),
+            ([M2, M3, M3, M5, M5, M6, M7, M8, S3, S3, S4, S4, S5, GD], 1),
+            ([M3, M4, M5, M5, P1, P7, P8, S1, S4, S4, S5, S6, S, N], 3),
+            ([M2, M3, M4, M5, M8, P2, P3, P4, P8, S2, S2, S4, N, N], 2),
+            ([M2, P1, P1, P2, P7, P8, S5, S6, S7, S7, S8, N, N, RD], 2),
+            ([M2, M3, M4, M6, M7, M9, P1, S5, S6, S7, S7, S, WD, RD], 3),
+            ([M2, M4, M6, P3, P3, P3, P4, P4, P6, P7, P7, P7, P7, P8], 0),
+            ([M3, M3, M4, P1, P5, P5, P6, P7, S3, S7, S8, E, N, WD], 4),
+            ([M2, M2, M3, M4, M5, M6, P2, P2, P5, P5, S8, S9, WD, RD], 2),
+            ([M1, M8, M9, P1, P3, P4, P5, P5, P7, S4, S8, S9, S, GD], 3),
+            ([M6, M8, M8, P2, P2, P4, P5, P6, P6, P8, S3, S3, S8, N], 2),
+            ([M1, M1, M3, M6, M8, P5, P7, P8, S5, S6, S7, N, N, N], 1),
+            ([M2, M3, M5, M7, M7, M8, M8, M9, P5, P6, P7, S9, W, W], 1),
+            ([M4, M5, M5, M7, M8, P2, P6, S3, S4, S5, S7, S8, S9, GD], 2),
+            ([M2, M6, P4, P5, P8, P9, S4, S4, S5, S6, S6, S7, S9, WD], 3),
+            ([M3, M4, M5, P4, P5, P7, P7, S3, S5, S6, S6, E, N, GD], 2),
+            ([M5, M5, M7, M7, M8, M9, P3, S1, S3, S4, S5, S6, S7, S8], 1),
+            ([M2, M2, M4, M7, M8, M9, P6, S1, S2, S3, S5, E, RD, RD], 2),
+            ([M4, M6, M9, P1, P5, P7, P8, P9, S2, S4, S9, E, S, N], 4),
+            ([P4, P5, P6, S1, S1, S1, S2, S2, S4, S5, S6, S6, S7, S8], -1),
+            ([M2, M2, M3, M4, M9, M9, P4, P6, P8, S1, S2, S3, S3, S5], 1),
+            ([M3, M4, M5, M5, M6, M7, M8, P6, P7, P8, S6, S6, S7, S8], 0),
+            ([M3, M4, M5, M6, M6, P2, P3, P4, P7, P8, S8, S8, E, WD], 1),
+            ([M3, M7, M7, P5, P8, P8, P9, P9, S1, S2, S5, S6, S7, E], 2),
+            ([M1, M3, M3, M9, M9, P3, P5, P6, P7, S3, S7, N, N, WD], 3),
+            ([M3, M4, M4, M5, M5, M6, P3, P4, P5, S2, S2, S6, S7, S8], -1),
+            ([M1, M2, M3, M8, M8, M8, P4, P5, P6, P7, P8, P8, P8, E], 0),
+            ([M1, M5, M5, M5, M6, P2, P3, P8, P9, P9, S5, S5, S7, S7], 2),
+            ([M1, M3, M3, M6, M7, M8, P1, P2, P3, S4, S4, S5, S6, S7], 0),
+            ([M5, M7, M7, P1, P2, S5, S5, S7, S7, S8, S9, S, WD, GD], 3),
+            ([M3, P1, P2, P3, P7, P8, P9, S1, S5, S9, WD, WD, GD, RD], 3),
+            ([M1, M5, M6, M8, P4, P7, P7, P9, S1, S2, S7, E, W, RD], 5),
+            ([M2, M3, M3, M4, M9, M9, P2, P7, P8, S3, S3, S7, S9, S], 2),
+            ([M6, M7, M8, P1, P2, P3, P3, P6, P6, P8, S6, S8, GD, GD], 1),
+            ([M4, M5, M7, M7, M8, P3, P3, P4, P8, S1, S1, S2, N, N], 2),
+            ([M5, M5, M6, M6, M9, P3, P4, P7, S1, S2, S2, S3, E, WD], 3),
+            ([M5, M7, M8, M9, P4, P6, P7, S1, S7, S8, S8, S9, S, S], 2),
+            ([M2, M2, M4, P3, P4, P5, P7, P7, P9, S1, S2, S7, S8, S9], 1),
+            ([M1, M1, M2, M8, M9, P2, P4, S2, S4, S4, S4, S7, S8, S9], 1),
+            ([M2, M4, M5, M7, M9, P3, P4, P5, P5, P6, P6, P7, S4, S4], 1),
+            ([P2, P5, P6, P6, P7, P7, P8, P9, S1, S1, S2, W, N, GD], 3),
+            ([M7, M7, P2, P5, P5, P7, P7, S4, S4, S6, S9, E, E, GD], 1),
+            ([M1, M3, M4, M7, M9, P1, P2, P5, P8, P9, S6, S8, E, WD], 4),
+            ([M1, M2, M4, M6, M6, P3, P7, S1, S2, S3, S4, S8, S9, W], 3),
+            ([M1, M3, M3, M4, M5, M5, M6, P7, P8, S3, S4, S4, S5, S6], 1),
+            ([M2, M6, P2, P4, P4, P6, P9, S2, S3, S5, S9, E, N, GD], 5),
+            ([M2, M3, M3, M6, M8, P1, P3, P8, S5, S6, S8, S9, S, RD], 3),
+            ([M1, M2, M3, M6, P9, P9, S1, S2, S2, S2, S5, S6, RD, RD], 1),
+            ([M5, M8, M8, P2, P3, P3, P4, P8, P9, P9, S4, S8, S8, S8], 2),
+            ([M2, M4, M4, M8, P1, P2, S2, S3, S7, S7, S8, S9, WD, GD], 3),
+            ([M2, M4, M8, P3, P7, P8, P9, S6, S6, S7, S8, S, RD, RD], 2),
+            ([M1, M5, M5, M7, M7, P4, P5, P7, P8, S1, S1, S2, S4, S5], 3),
+            ([M4, M5, P7, P7, P8, P9, S3, S4, S5, S7, S7, S9, GD, GD], 1),
+            ([M2, M2, M3, M5, M6, P1, P2, P3, P4, P7, P7, S3, S5, S7], 2),
+            ([M4, M4, M7, P8, P8, S4, S5, S8, S9, S9, S, S, W, GD], 2),
+            ([M3, M3, M6, M7, M8, P4, P5, P7, P8, P9, S1, S6, S6, S7], 1),
+            ([M2, M3, M3, M5, M6, M6, P5, P6, P7, P7, S1, S2, S2, S4], 2),
+            ([M9, P1, P2, P3, P5, P6, P7, P8, P9, S2, S2, E, E, E], 0),
+            ([M2, M3, M7, P9, S1, S2, S3, S6, S7, S8, S9, S9, GD, GD], 1),
+            ([M5, M5, M5, M7, P1, P1, P3, P5, P5, S3, S6, S7, N, WD], 3),
+            ([M9, P2, P5, P5, P6, S1, S3, S5, S8, S9, E, E, WD, RD], 4),
+            ([P4, P5, S1, S1, S3, S4, S4, S5, S6, S7, S8, S9, W, W], 1),
+            ([M7, M7, M8, M8, P2, P4, P4, P6, P7, P8, S2, S4, S6, W], 2),
+            ([M2, M3, M3, M6, M8, P1, P1, P3, P5, P6, P6, S6, WD, WD], 2),
+            ([M7, M9, P4, P5, P6, P8, P9, P9, S3, S8, S8, S9, S9, S9], 1),
+            ([M1, M5, M8, M8, P4, S1, S3, S3, S3, S4, S, S, N, WD], 3),
+            ([M2, M4, M4, M6, P5, P6, P6, P7, S1, S2, S3, S6, W, W], 1),
+            ([M6, M9, P2, P3, P4, P4, P6, P6, P7, S4, E, WD, RD, RD], 3),
+            ([M2, M3, M4, M5, M6, M7, M7, P2, P3, P4, P7, P8, P9, S4], 0),
+            ([M4, M5, M6, M7, M9, P4, P8, P8, P9, S4, S6, S, W, GD], 3),
+            ([M1, M3, M4, M7, M8, P1, P2, P2, P5, S4, S6, S, W, RD], 4),
+            ([M8, M9, P4, P6, P9, P9, S3, S4, S4, S5, S5, S6, S7, S9], 1),
+            ([M6, M6, M8, M8, M8, P5, P7, P9, S2, S4, E, S, GD, RD], 3),
+            ([M4, M6, P2, P2, P4, P6, S1, S2, S4, S6, S8, E, N, GD], 3),
+            ([M3, M3, M3, M6, M7, M7, M8, P8, P8, S4, S6, S7, S8, N], 1),
+            ([M2, M2, M4, M4, M7, M8, M9, P3, P4, P4, P6, P7, S1, S3], 2),
+            ([M4, M5, M8, P2, P2, P2, P4, P5, P8, S2, S2, S5, S7, S7], 2),
+            ([M1, M1, M2, M2, M3, M3, M5, S4, S4, S5, S6, S6, WD, WD], 0),
+            ([M3, M4, M4, M7, M8, P2, P6, P8, S, S, W, N, GD, RD], 4),
+            ([M1, M1, M2, M3, M4, M5, M5, M6, S3, S3, S5, S6, S6, S7], 1),
+            ([M2, M3, M3, M3, P6, P8, P9, S4, S4, S5, S5, S6, E, S], 2),
+            ([M2, M3, M4, P2, P4, P5, P6, P7, S1, S2, S3, S3, S4, S5], 0),
+            ([M4, P3, P4, P5, P8, P9, S2, S3, S5, S5, S6, N, N, GD], 2),
+            ([M6, M7, M8, P4, P5, P6, P7, P7, P9, P9, S5, S8, S8, S9], 1),
+            ([M4, M4, M4, M4, M6, M8, P5, P7, S3, S4, S8, S, W, N], 3),
+            ([M2, M2, M4, M7, M8, M9, P6, S1, S2, S3, S5, E, RD, RD], 2),
+            ([M3, M4, M5, M6, M7, M7, M8, M8, M8, M9, P7, P9, S2, S2], 0),
+            ([M1, M4, P2, P2, P3, P6, P7, P8, P9, S2, S4, E, W, RD], 4),
+            ([M2, M3, M5, M7, M8, P6, P7, P7, P8, S3, S5, GD, GD, GD], 2),
+            ([M6, M6, M8, P3, P4, P6, P6, P6, S2, S4, S5, S7, W, WD], 2),
+            ([M4, M5, M7, M8, M9, P1, P3, P4, P6, P8, P9, P9, S1, S3], 2),
+            ([M3, M7, P1, P2, P3, P4, P8, P9, P9, S3, S5, S, W, N], 4),
+            ([M3, M5, M6, M7, M7, M8, M8, P2, P2, P5, P5, S2, S5, S6], 2),
+            ([M4, M5, M6, M7, M7, M8, S1, S2, S3, S6, S7, S7, N, N], 1),
+            ([M1, M4, M8, M8, P2, P5, P7, P8, P8, S2, S3, S6, S6, S8], 3),
+            ([M4, M5, M5, M7, M8, P2, P6, S4, S5, S7, S8, S9, WD, GD], 3),
+            ([M5, M6, M8, M9, P2, S3, S4, S4, S5, S5, S9, WD, GD, GD], 2),
+            ([M1, M5, M7, P1, P1, P3, P7, P7, P9, S4, S5, S6, S9, W], 3),
+            ([M6, M7, P4, P5, P7, S1, S3, S4, S4, S5, S5, S6, S8, S8], 1),
+            ([M1, M3, M4, M5, M5, M6, M7, P1, P2, P3, S4, S4, S5, S6], 0),
+            ([M1, M6, M8, P1, P3, P5, P6, S4, S5, S8, S8, E, N, WD], 3),
+            ([M5, M5, M6, M7, M7, M8, P3, P5, P7, S3, S3, S3, S6, S8], 1),
+            ([M3, M4, M7, M9, P2, P2, P3, P4, P4, P4, P6, S5, S5, S8], 2),
+            ([M3, M4, M5, M7, P2, P4, P5, P7, P9, S1, S2, S6, S7, S], 3),
+            ([M3, M7, M9, P2, P4, P7, P8, S2, S3, S3, S4, S5, S8, S9], 3),
+            ([M3, M9, M9, M9, P1, P1, P2, S1, S1, S7, S8, S9, N, N], 1),
+            ([M5, M5, M7, M8, P2, P2, P4, P7, P8, P9, S4, S8, E, E], 2),
+            ([M3, M4, M7, P1, P3, P6, P7, S3, S4, S7, S8, E, E, S], 3),
+            ([M5, M6, M9, P3, P4, P5, P8, P8, S2, S4, S4, S5, S7, S9], 2),
+            ([M2, M4, M6, P3, P4, P4, P7, P8, P9, S3, S5, S6, N, RD], 3),
+            ([M1, M2, M3, M4, M5, P5, P5, P6, P7, P8, S5, S6, S7, S7], 0),
+            ([M2, M4, P1, P1, P5, P7, P7, S4, S4, S5, S5, S6, E, S], 2),
+            ([M3, P3, P4, P6, P6, P7, S2, S6, S6, S8, N, N, GD, GD], 2),
+            ([M3, M6, M7, M8, M9, P1, P3, P4, P5, P6, P7, S2, S8, RD], 3),
+            ([M3, M4, M5, M7, M7, M9, M9, P1, P1, P4, P5, S2, S3, S4], 1),
+            ([M4, M4, M5, M5, P1, P2, P3, P5, S5, S9, WD, WD, GD, GD], 2),
+            ([M2, M4, M4, M4, P2, P3, P4, P4, P5, S3, S6, S7, S8, S9], 1),
+            ([M3, M4, M6, M6, P1, P3, P4, P4, S1, S2, S6, S7, S8, GD], 2),
+            ([M1, M1, M3, M8, P2, P3, P3, P6, S1, S7, W, W, GD, GD], 2),
+            ([P1, P1, P2, P5, P5, P6, P7, P8, P9, S7, S8, S9, WD, WD], 1),
+            ([M2, M3, M4, M4, P3, P4, P6, S3, S4, S5, S8, W, W, RD], 2),
+            ([M1, M4, M5, M7, M8, M9, P3, P3, P3, P5, P5, P7, S7, S7], 1),
+            ([M3, M3, M5, M5, P4, P5, P6, S1, S2, S3, S4, S4, S5, S9], 1),
+            ([M2, M3, M6, M6, M8, M8, P2, P3, P4, P6, P6, P8, S, S], 2),
+            ([M5, P2, P3, P5, P6, P9, P9, S2, S3, S4, S6, S7, S7, S8], 1),
+            ([M3, M4, M5, M6, M7, M7, M8, M8, M9, P7, P9, S1, S2, S2], 0),
+            ([M2, M3, M4, M5, M6, M7, M7, P2, P3, P7, P8, P9, S2, S3], 1),
+            ([M4, M7, M9, P1, P1, P2, P5, S1, S2, S3, S4, S4, S5, RD], 3),
+            ([M9, M9, P1, P1, P2, P4, P9, S1, S1, S1, S8, S9, W, N], 2),
+            ([M1, M1, M3, M5, M6, P1, P3, P7, S7, S8, S9, GD, RD, RD], 2),
+            ([M8, P2, P2, P5, P5, P6, P8, P8, P8, S4, S5, W, W, GD], 2),
+            ([M3, M3, M4, M6, M6, M7, P3, P3, P6, P8, S2, S4, S7, S8], 3),
+            ([M1, M2, M3, M4, M4, M7, M8, M8, M8, M9, P5, S5, E, WD], 2),
+            ([M1, M1, M4, M5, P3, P3, S1, S2, S3, S3, S4, S6, GD, GD], 2),
+            ([M3, M4, M6, M7, M8, P5, P6, P7, P8, P8, S1, S1, S8, E], 1),
+            ([M2, M2, M2, M3, M3, M4, M5, M5, M6, M8, P2, P3, S5, GD], 2),
+            ([M1, M2, M5, M6, M7, M9, P4, P5, S5, S6, S7, S9, S9, E], 1),
+            ([M2, M3, M6, M7, M8, P2, P4, P7, S2, S3, S3, S3, S7, S7], 1),
+            ([M1, M1, M1, M4, M5, P5, P7, P9, P9, S2, S6, S8, S9, WD], 2),
+            ([M2, P4, P5, P9, S1, S1, S2, S3, S4, S8, S9, WD, WD, GD], 2),
+            ([M2, M3, M4, M5, M5, M5, P1, P2, P2, P9, P9, P9, N, N], 0),
+            ([M4, M6, M7, P2, P2, P4, P7, P8, S2, S2, S3, S5, S6, W], 3),
+            ([M4, M5, M7, M7, P3, P5, P6, P7, P8, S1, S3, S7, S9, RD], 2),
+            ([M1, M2, M2, M5, M6, M8, P5, P6, P9, P9, S2, S3, S5, WD], 3),
+            ([M2, M5, M6, M7, P3, P4, S6, S7, S, W, W, WD, RD, RD], 2),
+            ([M2, M3, M3, M4, M4, M5, M7, M8, S7, S8, S9, N, RD, RD], 0),
+            ([M1, M3, P2, P2, P4, P4, P5, P6, P6, P8, P8, S5, S6, S9], 2),
+            ([M9, M9, P2, P5, P6, S3, S5, S6, S7, S7, S8, S8, S, S], 2),
+            ([M3, M5, M6, M8, P3, P4, P8, P8, S3, S5, S8, S8, S, S], 3),
+            ([M2, M2, M4, M5, M5, M7, M8, P3, P3, P5, P6, P7, S1, S2], 2),
+            ([M3, M3, M3, M6, P3, P3, P4, P5, P6, P6, S1, S6, S6, S6], 1),
+            ([M6, M7, P2, P4, P6, P7, P7, S6, S6, S6, S7, S8, S9, N], 1),
+            ([M3, M4, M5, P2, P3, P5, P6, S2, S3, S6, S6, S8, E, E], 2),
+            ([M4, M5, M6, M9, P4, P5, P6, S2, S2, S3, S5, S7, S7, N], 1),
+            ([M5, M6, P7, P8, P9, S2, S2, S5, E, W, W, W, N, GD], 2),
+            ([M3, P3, P5, P5, P6, P6, P9, P9, S1, S1, S4, S6, S8, E], 2),
+            ([M4, P4, P5, P6, P6, P7, P8, P8, S1, S1, S1, S5, S6, GD], 1),
+            ([M2, M2, M7, M8, M8, P7, P7, P9, S5, S6, S7, S9, S, GD], 3),
+            ([M1, M2, M3, M7, M7, P4, P8, S3, S3, S5, S6, S7, E, E], 1),
+            ([M3, M8, M9, P2, P3, P4, P5, P6, P8, P8, P9, S4, S5, WD], 2),
+            ([M1, M2, M3, M5, M8, P1, P3, P6, P6, P7, S1, S2, WD, GD], 3),
+            ([M4, M6, M7, M7, M8, P5, P6, P9, P9, S2, S3, S4, W, WD], 2),
+            ([M2, M3, M3, M6, M7, M8, M9, P3, P4, P5, S4, S6, N, N], 1),
+            ([M7, M7, P1, P2, P5, P5, P7, P7, S2, S4, S4, E, E, GD], 1),
+            ([M2, M2, M6, M7, M7, M9, P2, P5, P6, P6, S1, S4, GD, RD], 3),
+            ([M4, M9, P1, P5, P7, P7, S2, S3, S4, S6, S8, S9, S, W], 4),
+            ([M2, M3, M4, M5, M5, M5, P2, P2, P9, P9, P9, S, N, N], 0),
+            ([M3, M4, M4, M7, M8, M9, M9, P8, S3, S6, S8, S, W, N], 4),
+            ([M2, M6, M8, P1, P3, P7, S2, S2, S5, S6, S6, S7, WD, WD], 2),
+            ([M2, M4, M5, M5, M6, M9, P3, P6, P6, P9, S5, S6, S7, S8], 3),
+            ([M7, P2, P7, S1, S3, S4, S4, S5, S6, S7, S8, S9, S9, S], 3),
+            ([M4, P2, P2, P2, P3, P5, P6, P9, S3, S4, S5, S5, S6, S6], 2),
+            ([M2, M3, M4, M5, M6, P4, P4, P7, P9, S3, S6, S7, RD, RD], 2),
+            ([M3, M4, M5, M6, M7, M8, M9, P2, P3, P8, P8, S5, S7, S7], 1),
+            ([M2, M3, M4, M5, M6, M7, P4, P5, P6, P7, P8, P9, S1, S1], -1),
+            ([M7, M8, M9, P1, P3, S1, S2, S3, S6, S7, S7, S7, S8, RD], 0),
+            ([M2, M4, M4, M7, P5, P6, P6, P9, S6, S8, S8, S9, WD, GD], 3),
+            ([M2, M3, M4, M4, M5, M6, P5, P6, S1, S1, S1, S2, S2, E], 0),
+            ([M1, M2, M7, P1, P2, P3, P7, P8, P9, S5, S6, S7, E, E], 0),
+            ([M1, M2, M2, M3, M3, M3, M4, M5, M9, M9, P9, S4, S5, S6], 0),
+            ([M1, M2, M3, M8, P2, P5, P7, P8, P9, S4, S6, S, RD, RD], 2),
+            ([M2, M3, M4, M5, M6, P4, P5, P8, S2, S4, E, E, N, WD], 2),
+            ([M4, M5, P5, P6, P9, S3, S3, S4, S8, W, W, WD, GD, GD], 3),
+            ([M2, M2, M2, M3, M4, M7, M7, M7, M8, P6, P7, S3, S4, S5], 0),
+            ([P2, P4, P7, P8, P9, S1, S2, S3, S4, S6, S7, E, E, E], 1),
+            ([P5, P6, P7, P9, P9, S2, S3, S4, S6, S6, S7, S7, S8, S9], 0),
+            ([M1, M2, M6, P5, P7, S2, S2, S3, S5, S5, S6, S7, S7, RD], 2),
+            ([M4, M7, P2, P3, P4, P7, P9, S1, S3, N, WD, WD, GD, GD], 2),
+            ([M8, M8, M9, M9, P6, P6, P8, S2, S3, S5, S5, S7, S8, WD], 2),
+            ([M5, P1, P2, P4, P6, P8, P9, S2, S4, S6, S6, S7, RD, RD], 3),
+            ([M4, M4, M6, M6, M6, M7, P4, P5, P6, P6, S1, S1, S7, S8], 1),
+            ([M1, M4, M5, M7, M8, M8, P2, P4, P5, P8, P9, S4, S, N], 4),
+            ([M2, M7, M8, M9, M9, P5, S3, S6, S7, S7, S9, WD, GD, GD], 3),
+            ([M5, P1, P1, P2, P3, P4, P6, P7, S4, S4, S4, S5, S6, S8], 1),
+            ([M5, M5, M7, P5, P6, P6, P7, P7, S1, S1, S4, S4, S4, W], 1),
+            ([M3, M6, P5, P8, P8, S2, S2, S6, S7, E, E, S, WD, RD], 3),
+            ([M3, M3, M4, M6, M6, M7, P2, P4, P6, P7, P8, S6, S7, S8], 1),
+            ([M6, M7, M8, M8, M8, M9, M9, P3, P4, P5, S4, S4, S5, S6], 0),
+            ([M4, M6, P3, P3, P3, P4, P4, P6, P7, P7, P7, P7, P8, S6], 0),
+            ([M1, M1, M5, M6, M6, M7, P6, P7, P8, P9, P9, S3, S8, WD], 2),
+            ([M1, M4, M5, M5, M5, M6, M6, M7, P3, P6, P7, S1, S3, S5], 2),
+            ([M4, M5, M7, P4, P4, P6, P7, P8, P9, P9, P9, S5, S6, S7], 0),
+            ([M8, P2, P7, S1, S4, S4, S7, S8, S8, S9, S9, S9, GD, RD], 3),
+            ([M4, P2, P2, P3, P5, P6, P6, P7, P8, S2, S5, S7, E, WD], 3),
+            ([M3, M4, M7, M9, P1, P3, P4, P4, P5, P5, P7, P8, P9, S4], 2),
+            ([M1, M2, M7, M7, M8, P2, P5, P5, P6, P9, P9, S4, S6, S], 3),
+            ([S1, S1, S1, S1, S3, S4, S5, S7, S7, S8, S9, RD, RD, RD], 0),
+            ([M1, M2, M3, M5, P1, P3, P5, P6, P7, P9, P9, S2, S2, S4], 1),
+            ([M2, M4, M7, P3, P3, P4, P4, S1, S1, S2, S3, S4, S7, RD], 2),
+            ([M3, M4, M4, P1, P4, P6, P8, S1, S4, S7, S7, E, S, W], 4),
+            ([M4, M5, M5, M9, P5, P6, P6, P7, P7, S2, N, WD, RD, RD], 2),
+            ([M1, M1, M2, M4, M6, M8, M8, M9, P8, P9, S3, S4, W, W], 3),
+            ([M4, M4, M5, M5, M7, M9, S2, S3, E, S, N, WD, GD, RD], 4),
+            ([M2, M5, M6, P5, P7, P8, P9, S1, S2, S3, S6, S7, E, WD], 2),
+            ([M2, M3, M3, M4, M4, M5, P3, P3, S2, S3, S6, S6, S6, S8], 0),
+            ([M3, M5, M6, P2, P8, S1, S2, S5, S6, S, W, N, WD, GD], 5),
+            ([M6, M7, P8, P9, S1, S1, S2, S4, S4, S6, S6, W, WD, WD], 2),
+            ([M2, M3, M4, M6, M6, M7, P2, P6, P7, S3, S6, S6, S6, W], 2),
+            ([M4, M5, M5, M6, P5, P6, P7, P7, S1, S5, S6, S6, S7, W], 2),
+            ([P3, P3, P3, P3, P5, P6, S4, S5, S6, S6, S8, S8, N, N], 1),
+            ([M2, M3, M4, M4, M5, P3, P6, P7, S1, S6, S6, S7, S8, S9], 1),
+            ([M1, M2, M3, M3, M6, M9, P6, S2, S3, S8, N, N, WD, RD], 4),
+            ([M1, M2, M3, M4, M7, M8, M9, S4, S4, S5, S5, S6, S6, S8], 0),
+            ([M1, M1, M3, M4, M5, M8, M9, P2, P4, P5, P5, P6, P6, P7], 0),
+            ([M2, M4, M6, P5, P6, P6, P8, S1, S2, S3, S6, E, W, W], 2),
+            ([M2, M6, M6, P1, P3, P7, P7, P8, P9, P9, S4, S5, S5, S6], 1),
+            ([S1, S2, S3, S4, S5, S6, S8, S8, E, E, E, W, W, WD], 0),
+            ([M3, M4, M4, M8, P1, P4, P9, S2, S3, S6, S7, S9, W, N], 5),
+            ([M2, M3, M3, M4, M4, M6, M8, P3, P3, P4, P7, S2, S4, S4], 2),
+            ([M1, P3, P4, P5, P6, P7, P7, P9, P9, S3, S4, S4, S6, S7], 2),
+            ([M1, M4, P5, P6, P6, P8, S4, S5, S8, S9, S9, E, W, W], 3),
+            ([M5, M5, M5, M8, P6, P6, P6, S6, S6, S7, S8, S9, WD, WD], 0),
+            ([M3, M3, M4, M7, M8, M9, P3, P4, P4, S2, S2, S4, S5, S6], 1),
+            ([M6, P6, P7, S1, S1, S3, S4, S5, S6, S7, S8, S, W, W], 1),
+            ([M1, M3, M5, P2, P3, P5, P5, P5, P7, S2, S5, S8, S8, S8], 2),
+            ([M5, M7, P1, P1, P3, P3, P4, S1, S5, S7, S7, GD, RD, RD], 2),
+            ([M3, M6, P3, P4, P4, P5, P5, P6, P7, P8, S3, S4, S5, S5], 1),
+            ([P4, P6, P7, P7, S1, S2, S4, S4, S5, S5, S7, S8, S9, GD], 2),
+            ([M2, M3, M3, M3, P4, P7, P7, P9, P9, S6, S8, S9, S9, WD], 2),
+            ([M3, M4, M5, M6, M6, M6, P8, P8, S4, S5, S6, S7, S8, S8], 0),
+            ([M3, M4, M4, M5, M7, P1, P1, P1, P2, S1, S5, S5, S6, S8], 2),
+            ([M2, M2, M2, M7, M8, M9, P5, P5, P7, P8, P9, S7, S8, S9], -1),
+            ([M3, M4, M4, M5, M7, P3, P4, P5, P5, P6, P7, S5, S6, S7], 0),
+            ([M1, M3, P1, P2, P4, P4, P5, P5, S3, S3, S5, W, N, N], 2),
+            ([M5, M7, M7, M7, P5, P8, P8, S3, S6, S7, S7, S9, E, S], 3),
+            ([M2, M2, M3, M4, M7, M7, P2, P4, P5, P6, S2, S6, W, W], 2),
+            ([M1, M4, M5, M8, P3, P3, P6, P6, P8, P8, S7, S8, S8, S9], 2),
+            ([M4, M5, M5, M5, M6, M9, P3, S2, S8, S, N, WD, GD, RD], 5),
+            ([M7, M8, M8, P1, P1, P8, P8, P9, S3, S3, S5, S6, S6, S7], 1),
+            ([M3, M4, M4, P4, P5, P7, P7, P9, S4, S4, S4, S6, S6, S7], 2),
+            ([M1, M2, M3, M4, M5, P5, P5, P6, P7, P8, S5, S6, S7, E], 0),
+            ([M1, M2, M5, M9, P4, P6, P9, S2, S2, S5, S7, E, WD, RD], 4),
+            ([M3, M6, P2, P4, P5, P6, P7, P7, S7, S8, N, WD, RD, RD], 3),
+            ([M2, M4, M5, M6, P3, P3, P4, P5, S4, S5, S5, S6, S8, S8], 1),
+            ([M3, M3, M4, M7, M7, P8, P8, S3, S3, S3, S5, S6, S7, RD], 1),
+            ([M1, M2, M3, M6, P1, P2, P3, S1, S2, S6, S7, S9, S9, S9], 1),
+            ([M3, M3, M4, M7, P3, P4, P5, P6, S1, S6, S7, S, GD, RD], 4),
+            ([M3, M5, P4, P4, P5, P7, P9, S1, S6, S6, S8, GD, GD, RD], 3),
+            ([M3, M4, M6, P1, P2, P8, S4, S4, S4, S5, S6, S8, S9, S9], 2),
+            ([M2, M4, P2, P3, P4, P6, P7, P8, S2, S4, S9, S9, S9, N], 1),
+            ([M4, P1, P4, P6, P7, P9, S1, S5, S7, S, WD, GD, RD, RD], 4),
+            ([M5, P1, P8, S1, S1, S2, S2, S3, S3, S4, S6, E, S, GD], 3),
+            ([M5, P2, P3, P3, P4, S2, S4, S5, S5, S8, S9, E, N, GD], 3),
+            ([M5, M6, P7, P8, P9, S2, S2, S3, S5, S6, W, W, W, N], 1),
+            ([M2, M2, M3, M4, M4, M6, M8, P4, P4, P5, S4, S4, S8, S9], 2),
+            ([M1, M2, M2, M2, M6, M7, M9, P2, P5, P5, S4, S5, S7, S7], 2),
+            ([M2, M4, P5, P6, P7, P7, P7, P9, S2, S3, S5, E, WD, RD], 3),
+            ([M2, M5, M6, M9, P4, P5, S2, S3, S3, S4, S4, N, WD, RD], 3),
+            ([M2, M2, M2, M9, P8, P8, P9, P9, S1, S7, S7, N, WD, WD], 1),
+            ([M2, M3, M3, M4, P7, S1, S1, S4, S4, E, S, N, GD, RD], 3),
+            ([M2, M7, M9, P1, P4, P6, P6, P7, P8, S2, S3, S6, N, GD], 3),
+            ([M3, M4, M5, M6, M7, M7, P3, P3, P7, P8, P8, P9, P9, S8], 1),
+            ([M2, M8, M9, P1, P2, P3, P3, P4, P7, P9, S5, S7, S9, GD], 3),
+            ([M1, M3, P1, P2, P2, P4, S1, S4, S5, S5, S7, S8, GD, RD], 3),
+            ([M4, M5, M6, M6, P3, P3, P4, P7, S4, S4, S5, S8, N, GD], 3),
+            ([M4, M5, M5, M7, M7, P5, P8, P9, S2, S3, S3, S5, S5, WD], 2),
+            ([M1, M3, M5, M6, M6, M9, M9, P2, P8, S4, S5, E, S, W], 4),
+            ([M5, M6, M6, P3, P3, P3, S4, S6, S6, S6, S8, S8, RD, RD], 1),
+            ([M3, M3, M3, M5, M6, P2, P3, P7, P8, P9, S4, S5, S6, WD], 1),
+            ([M3, M6, P4, S1, S2, S4, S5, S5, S9, N, N, WD, WD, WD], 3),
+            ([M1, M3, M3, M7, P3, P6, P8, P9, S1, S1, S1, S5, S7, S8], 3),
+            ([M2, M3, M4, M7, M8, P2, P2, P5, S4, S4, S6, S6, S6, S7], 1),
+            ([M1, M2, M3, P6, P7, P7, S1, S2, S2, S3, S4, S7, S8, N], 1),
+            ([M6, M6, P2, P4, P8, P8, S2, S2, S4, S4, S5, S5, S6, S6], 0),
+            ([M5, M5, M6, M7, M7, M8, M8, M9, S3, S4, S5, S6, S7, S8], -1),
+            ([M1, M2, M6, P2, P3, P3, P5, P6, P7, S1, S4, S5, GD, GD], 2),
+            ([M3, M4, M5, M6, P5, P6, P7, P7, P8, S5, S, S, S, W], 1),
+            ([M1, M3, M3, M4, P7, S5, S6, S8, S, W, W, N, GD, RD], 4),
+            ([M2, M3, P2, P4, P4, P5, P6, S3, S4, S6, S6, S7, RD, RD], 2),
+            ([M1, M2, M3, P1, P2, P3, S1, S2, S4, S6, S7, S9, S9, S9], 1),
+            ([M4, M5, M6, M7, M8, M9, P2, P3, P4, P5, S2, S2, S7, S8], 0),
+            ([M7, P1, P2, P3, P4, P5, P8, S4, S6, S6, W, W, GD, RD], 3),
+            ([M3, M4, M5, P4, P4, P6, P7, P7, P8, S1, S3, S4, S6, RD], 1),
+            ([M4, M5, M5, M7, M8, P4, P5, P5, P6, P6, P9, S4, S5, S6], 1),
+            ([M1, M2, M7, M8, M8, M9, P5, P7, S1, S2, S4, S5, S6, RD], 2),
+            ([M4, M6, M7, P1, P2, P4, S3, S5, S7, N, N, WD, GD, RD], 4),
+            ([M4, M4, M5, M6, M7, M8, M9, P3, P4, P6, P6, P8, S4, S5], 1),
+            ([P3, S1, S1, S3, S4, S4, S4, S5, S6, S7, S8, S9, W, W], 1),
+            ([M3, M4, M7, M7, M9, P2, P7, P7, S2, S3, S4, S7, S7, S7], 1),
+            ([M3, M3, M6, P2, P2, P8, S2, S3, S3, S4, S4, S4, S8, S8], 1),
+            ([M3, M4, M6, M9, M9, P3, S2, S2, S4, S5, S6, S6, N, GD], 3),
+            ([M2, M2, M5, M6, M9, P5, P7, P8, P9, S3, S3, S5, S5, S6], 2),
+            ([M2, M3, M4, M8, P3, P4, P5, P7, S4, S7, S7, S9, S9, E], 2),
+            ([M1, M2, M3, M5, M5, M6, P4, P7, S2, S3, S4, S5, S9, E], 3),
+            ([M2, M4, M5, M5, M7, P6, S3, S4, S6, S6, S7, WD, WD, GD], 3),
+            ([M3, M4, M5, M6, M7, M9, M9, P5, P5, P6, S2, S2, S2, N], 1),
+            ([M1, M2, M3, P1, P2, P3, P5, P6, P6, P8, P9, S1, S7, S8], 1),
+            ([M1, M2, M3, M3, M5, M8, M8, M8, P3, P3, P4, S4, S4, GD], 1),
+            ([M1, M1, M3, M4, M6, M7, M7, M8, P2, P3, S, S, S, GD], 1),
+            ([M2, M5, M6, M7, M8, M9, P1, P2, P5, P6, S4, S7, S9, S9], 2),
+            ([M6, M6, M7, M8, M9, P1, P2, P5, P6, P9, S2, S3, S5, S], 2),
+            ([M4, M4, M5, M6, M6, M8, P6, S1, S1, S2, S9, E, WD, GD], 3),
+            ([M2, M4, M7, M8, M9, P1, P4, P6, S3, S7, S7, WD, GD, RD], 3),
+            ([M2, M7, M7, M8, M8, M9, M9, P1, P2, P3, S6, S6, S7, S9], 0),
+            ([M4, M5, M6, M8, P2, P3, P6, S1, S3, S4, S5, S7, S8, S9], 1),
+            ([M2, M3, M4, M4, M5, M7, M7, M8, M8, P2, P6, P6, S6, S8], 2),
+            ([M2, M3, P1, P1, P2, S1, S2, S3, S5, S6, E, S, S, GD], 2),
+            ([M3, M5, M7, P3, P3, P7, P8, S1, S2, S3, S4, S4, S5, S6], 1),
+            ([M6, M8, P1, P1, P5, P5, P7, P9, S4, S5, S8, W, WD, GD], 3),
+            ([M3, M3, M4, M7, M8, P2, P5, P8, P8, S3, S6, S6, S8, WD], 3),
+            ([M1, M2, M6, M7, M8, P3, P4, P4, P5, P5, P6, P7, P8, P9], 0),
+            ([M1, M2, M3, M5, M6, P4, S1, S1, S5, S6, S6, E, S, GD], 3),
+            ([M2, M6, M6, M9, M9, P3, P9, P9, S2, S2, S5, S7, S7, W], 1),
+            ([M3, M4, M6, M6, P2, P4, P5, P6, P7, P8, S5, S6, S7, RD], 1),
+            ([M3, M4, M4, M5, M7, P3, P6, S1, S6, S8, S9, W, W, RD], 4),
+            ([M1, M3, M5, M6, M8, M8, P2, S2, S4, S4, S7, S8, N, RD], 3),
+            ([P2, P3, P4, P6, P7, P7, P9, S1, S2, S5, S6, S7, S8, S9], 1),
+            ([M1, M3, M4, M6, M8, P3, P7, P8, P9, S2, S8, E, E, S], 3),
+            ([M3, M7, P2, P3, P5, P7, P8, S1, S2, S3, S3, S, WD, WD], 3),
+            ([M6, M6, P2, P3, P4, P7, P8, S1, S2, S3, S7, S7, S7, RD], 0),
+            ([M2, M5, M8, P2, P3, P8, P9, S3, S3, S3, S5, S5, S8, WD], 3),
+            ([M3, M4, M4, M5, M7, M8, M9, P3, P5, P7, S7, S7, E, W], 2),
+            ([M3, M4, M6, M9, M9, P2, P2, P4, P4, P5, P6, P8, S9, RD], 3),
+            ([M3, M3, M5, M6, M6, M6, M7, M8, M9, M9, P6, S5, S6, S7], 1),
+            ([M3, M4, M5, M7, M8, P2, P3, P6, P7, S1, E, E, N, RD], 2),
+            ([M8, M8, M8, M9, P4, P4, P5, P5, P6, P7, P8, S5, S6, S7], 0),
+            ([M3, M4, M7, M8, P2, P6, P8, S2, S9, S, S, W, N, RD], 4),
+            ([M5, M5, P2, P4, P7, S1, S2, S8, S8, WD, WD, GD, GD, RD], 2),
+            ([M2, M3, P1, P2, P4, P5, P8, P9, S6, S7, S7, S9, S, W], 3),
+            ([M2, M4, M6, P1, P1, P2, P2, P5, P6, P7, P7, S6, WD, GD], 3),
+            ([M6, M6, P2, P3, P4, P5, P7, S2, S2, S3, S7, S7, S8, S], 2),
+            ([M1, M3, M3, M7, M8, P5, P6, S1, S3, S3, S5, S5, S6, S], 3),
+            ([M9, M9, P3, P3, P7, P8, P9, S4, S, W, WD, GD, GD, RD], 3),
+            ([M1, M6, M7, P5, P6, P7, S1, S2, S3, S5, S7, S7, W, W], 1),
+            ([M5, M6, M6, P1, P2, P2, P4, P6, S1, S2, S2, S2, S6, RD], 3),
+            ([M8, M8, P1, P3, P4, P8, P8, S3, S3, S6, S7, GD, RD, RD], 2),
+            ([M2, M2, M5, M5, M6, P3, P3, P3, P6, S2, S4, S6, S8, GD], 2),
+            ([M2, M3, M5, M5, M6, P2, P4, P6, P7, S1, S4, S6, E, S], 3),
+            ([M2, M3, M4, M7, P2, P9, S1, S5, S7, S8, S9, W, N, RD], 4),
+            ([M1, S3, S4, S4, S4, S6, S6, S7, E, W, N, WD, GD, RD], 4),
+            ([M2, M6, M8, M9, P3, S3, S4, S4, S5, S6, S7, S8, S9, S], 2),
+            ([M2, M3, M3, M7, P8, S5, S6, S7, S8, E, N, WD, GD, RD], 5),
+            ([M1, M7, M7, M8, P3, P4, P6, S3, S5, S5, S6, S7, W, W], 2),
+            ([M8, M9, P5, P5, P7, P7, P7, S4, S5, S5, S6, S6, S7, RD], 0),
+            ([M6, M7, M7, M9, P2, P4, S1, S1, S2, S5, S7, S9, N, N], 3),
+            ([M3, M4, P6, P6, P7, P8, P8, P8, S6, S7, S7, E, E, GD], 2),
+            ([M2, M4, M5, M6, M8, P1, P2, P4, P6, P7, S5, S5, S8, GD], 3),
+            ([M2, M4, M5, M7, P4, P6, P7, P8, P9, P9, P9, S5, S6, E], 2),
+            ([M2, M3, M4, M5, M6, M8, P6, S2, S2, S4, S6, W, N, GD], 3),
+            ([M1, M8, P3, P8, P9, S1, S2, S3, S7, S9, S, WD, WD, GD], 3),
+            ([M2, M3, M3, M3, M7, M8, P3, P4, P7, P9, S4, S5, S7, S9], 3),
+            ([M5, M7, M8, M9, P6, P8, P8, S4, S5, S6, E, S, WD, GD], 3),
+            ([M4, M6, P2, P3, P4, P5, P6, P6, P7, P8, S4, S6, N, N], 1),
+            ([M5, M7, M8, M9, P8, P8, S4, S5, S6, S9, E, S, WD, GD], 3),
+            ([M1, M1, M4, M9, P1, P3, P5, P6, S4, S5, S7, E, N, GD], 4),
+            ([M2, M3, M8, M8, M9, P1, P1, P3, P3, P4, P7, S7, GD, GD], 2),
+            ([M4, M5, M5, M6, M6, M8, P3, P8, S1, S5, S7, S8, E, S], 4),
+            ([M4, M4, M8, P6, P8, P8, P9, P9, S1, S1, S2, S3, S4, E], 2),
+            ([M7, M8, P3, P4, P5, P5, P6, P7, S3, S6, S8, S8, S8, RD], 1),
+            ([M4, M7, P2, P4, P5, P6, P7, P9, P9, S3, S4, S6, S6, RD], 2),
+            ([M1, M2, M2, M5, M9, P7, P7, P8, P9, S2, S3, S6, E, WD], 4),
+            ([M4, M4, M6, M6, M6, P4, P5, P6, P9, S1, S1, S7, S8, E], 1),
+            ([M3, M6, P4, P7, P7, P8, P9, S3, S6, S8, S8, S9, S9, S9], 3),
+            ([M1, M1, M2, M3, M4, M5, M8, M9, P4, P5, P5, P6, P6, P7], 0),
+            ([M3, M8, P1, P2, P5, P5, S4, S4, S5, S6, S7, S, W, RD], 3),
+            ([M1, M1, M2, M3, M6, P6, P9, S1, S3, S3, S6, S6, S9, S9], 2),
+            ([M3, M8, P3, P5, P6, P8, P9, S1, S1, S1, S3, S6, N, N], 3),
+            ([M5, M6, P3, P5, P7, P7, P8, S2, S3, S4, S5, S6, WD, WD], 2),
+            ([M2, M3, M6, P5, P6, P9, S2, E, E, S, W, N, GD, GD], 4),
+            ([P5, P6, P7, P8, P9, S2, S3, S3, S4, S5, S6, S7, S8, S9], 0),
+            ([M2, M3, M3, P2, P4, P5, P5, P7, P7, S1, S5, S7, S9, S9], 2),
+            ([M4, M4, M4, M6, M6, M6, P2, P4, S4, S5, S7, S8, S8, S9], 1),
+            ([M2, M3, M5, M6, M6, M8, M8, P4, P6, P7, P7, P8, S5, S5], 2),
+            ([M3, M4, M5, M6, M6, M7, P2, P3, S1, S2, S3, S9, S9, E], 1),
+            ([M1, M2, M5, M5, M6, P2, P3, P3, P4, S3, S4, S4, S6, S8], 2),
+            ([M5, M6, M9, P1, P2, P4, P5, P6, S3, S4, S4, S, S, S], 1),
+            ([M2, M3, M6, P1, P2, P2, P5, P5, P9, S6, S8, S9, W, WD], 4),
+            ([M1, M2, M2, M3, M3, M4, M5, M6, E, WD, WD, GD, RD, RD], 1),
+            ([M3, M4, M7, P1, P3, P3, P6, P7, P8, P8, S5, S6, GD, GD], 2),
+            ([M1, M5, M6, M6, M8, M8, P3, P9, S3, S3, S7, N, RD, RD], 2),
+            ([M1, M2, M3, M5, P1, P2, P6, P8, S3, S3, S6, S7, E, WD], 2),
+            ([M2, M4, M4, M4, M9, M9, P2, P3, P9, S1, S2, S3, N, GD], 2),
+            ([M2, M5, M7, P2, P2, P3, S7, S9, E, E, WD, GD, RD, RD], 3),
+            ([M6, M7, M7, M7, M8, M8, M8, P2, P3, P6, P7, E, E, S], 1),
         ];
 
         let input = hands.map(|hand| {
@@ -1512,13 +1451,75 @@ mod tests {
                 hand.1,
             );
             for v in hand.0 {
-                ret.0[v] += 1;
+                ret.0[(v as i8 - 1) as usize] += 1;
             }
             ret
         });
 
         for v in input {
-            assert_eq!(shanten(&Vec::from(v.0)), v.1);
+            assert_eq!(calc_shanten(&Vec::from(v.0)), v.1);
+        }
+    }
+
+    #[test]
+    pub fn shanten_works_debug() {
+        // Interesting cases from https://github.com/MahjongRepository/mahjong/commit/e8ba9fe306148d47ae9fb5e94d1e4dd4c08d7c1e
+
+        let hands = [
+            ([M1, M1, S, S, S, S, W, W, W, W, N, N, N, N], 2),
+            ([M2, M3, S, S, S, S, W, W, W, W, N, N, N, N], 2),
+            ([E, E, E, E, S, S, S, S, W, W, W, N, N, N], 1),
+        ];
+
+        // 13-tiles cases
+        let hands_13_tiles = [
+            ([M1, M2, M3, M4, M5, M6, M7, M8, M9, E, E, E, E], 1),
+            ([M1, M2, M3, M4, M5, M6, M7, M8, M9, P1, P1, P1, P1], 1),
+            ([P1, P2, P3, S1, S1, S2, S2, S3, S3, M1, M1, M1, M1], 1),
+            ([E, E, E, E, S, S, S, W, W, W, N, N, N], 1),
+            ([M1, M1, E, E, E, E, S, S, S, S, W, W, W], 2),
+            ([M2, M3, E, E, E, E, S, S, S, S, W, W, W], 2),
+            ([E, E, E, E, S, S, S, S, W, W, W, W, N], 3),
+        ];
+
+        let input = hands.map(|hand| {
+            let mut ret = (
+                [
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, //
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, //
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, //
+                    0, 0, 0, 0, 0, 0, 0,
+                ],
+                hand.1,
+            );
+            for v in hand.0 {
+                ret.0[(v as i8 - 1) as usize] += 1;
+            }
+            ret
+        });
+
+        let input_13_tiles = hands_13_tiles.map(|hand| {
+            let mut ret = (
+                [
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, //
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, //
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, //
+                    0, 0, 0, 0, 0, 0, 0,
+                ],
+                hand.1,
+            );
+            for v in hand.0 {
+                ret.0[(v as i8 - 1) as usize] += 1;
+            }
+            ret
+        });
+
+        for v in input {
+            assert_eq!(calc_shanten(&Vec::from(v.0)), v.1);
+        }
+
+        for v in input_13_tiles {
+            assert_eq!(calc_shanten(&Vec::from(v.0)), v.1);
         }
     }
 
@@ -1530,7 +1531,7 @@ mod tests {
             0, 1, 1, 0, 0, 2, 0, 0, 0, //
             0, 0, 0, 0, 0, 0, 0,
         ];
-        let result = hairi(Vec::from(hand).as_mut(), false);
+        let result = hairi(Vec::from(hand).as_mut());
         assert!(!result.is_none());
         let res = result.unwrap();
         assert_eq!(res.now, 0);
@@ -1546,7 +1547,7 @@ mod tests {
             0, 1, 0, 0, 1, 2, 0, 0, 0, //
             0, 0, 0, 0, 0, 0, 0,
         ];
-        let result = hairi(Vec::from(hand).as_mut(), false);
+        let result = hairi(Vec::from(hand).as_mut());
         assert!(!result.is_none());
         let res = result.unwrap();
         assert_eq!(res.now, 1);
@@ -1561,7 +1562,7 @@ mod tests {
             0, 0, 1, 1, 1, 1, 1, 0, 0, //
             0, 0, 0, 0, 0, 0, 0,
         ];
-        let result = hairi(Vec::from(hand).as_mut(), false);
+        let result = hairi(Vec::from(hand).as_mut());
         assert!(!result.is_none());
         let res = result.unwrap();
         assert_eq!(res.now, 0);
@@ -1584,7 +1585,7 @@ mod tests {
             1, 1, 1, 0, 2, 0, 0, 0, 0, //
             0, 0, 0, 0, 0, 0, 0,
         ];
-        let result = hairi(Vec::from(hand).as_mut(), false);
+        let result = hairi(Vec::from(hand).as_mut());
         assert!(!result.is_none());
         let res = result.unwrap();
         assert_eq!(res.now, 0);

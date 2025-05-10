@@ -400,15 +400,13 @@ fn calc_all(
         outgoing_ten: Option::from((0, 0)),
         yaku: Vec::new(),
         hairi: None,
-        hairi7and13: None,
     };
 
     result.is_agari = check_all(haipai34);
 
     if !result.is_agari || haipai.len() + furo.len() * 3 != 14 {
         if calc_hairi {
-            result.hairi = hairi(haipai34.clone().as_mut(), false);
-            result.hairi7and13 = hairi(haipai34.clone().as_mut(), true);
+            result.hairi = hairi(haipai34.clone().as_mut());
         }
         return Ok(result);
     }
