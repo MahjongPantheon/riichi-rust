@@ -39,7 +39,7 @@ impl Add<Val> for usize {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum Tiles {
     M1 = 1,
     M2 = 2,
@@ -80,7 +80,7 @@ pub enum Tiles {
     RD = 34,
 }
 
-#[derive(Clone, PartialOrd, PartialEq)]
+#[derive(Clone, PartialOrd, PartialEq, Eq)]
 pub enum Yaku {
     Kokushimusou13Sides = 0,
     Kokushimusou = 1,
