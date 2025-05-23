@@ -8,3 +8,4 @@ mod yaku;
 pub use crate::constants::{Tiles, Yaku};
 pub use crate::interfaces::{RiichiHand, RiichiOptions, RiichiResult};
 pub use crate::riichi::calc_riichi;
+pub use crate::shanten::calc_shanten;
