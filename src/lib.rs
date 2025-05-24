@@ -5,6 +5,7 @@ mod riichi;
 mod shanten;
 mod yaku;
 
+pub use crate::agari::find_all_agari_patterns;
 pub use crate::constants::{Tiles, Yaku};
 pub use crate::interfaces::{RiichiHand, RiichiOptions, RiichiResult};
 pub use crate::riichi::calc_riichi;
