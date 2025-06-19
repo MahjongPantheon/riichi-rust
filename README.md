@@ -17,7 +17,7 @@ Install the library by adding the following in your Cargo.toml:
 ```toml
 [dependencies]
 # write last version from https://github.com/MahjongPantheon/riichi-rust/blob/main/Cargo.toml
-riichi-rust = { git = "https://github.com/MahjongPantheon/riichi-rust.git", version = "2.0.4" } 
+riichi-rust = { git = "https://github.com/MahjongPantheon/riichi-rust.git", version = "2.1.0" } 
 ```
 
 Use the library:
