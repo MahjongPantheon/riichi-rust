@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 mod agari;
 mod constants;
 mod interfaces;
